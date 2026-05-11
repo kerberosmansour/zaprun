@@ -1,0 +1,41 @@
+name: Dast.Spike
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run DAST
+        run: |
+          docker run --rm --user 1000:1000 \
+            --add-host=host.docker.internal:host-gateway \
+            -v "$PWD/output:/zap/wrk/output:rw" \
+            ghcr.io/kerberosmansour/zaprun@sha256:0643f08f6b2f64fb5dd76f9713e1411cb76f7c37e049bff89e3e9954056c1c4f \
+            --target http://host.docker.internal:3001 \
+            --output-dir /zap/wrk/output \
+            --policy /zap/policies/policy-pr.yml
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zaprun-report
+          path: output/
+          retention-days: 30
+

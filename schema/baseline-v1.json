@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/baseline-v1.json",
+  "type": "object",
+  "required": ["$schema", "schema_version", "suppressions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "1.0" },
+    "suppressions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": ["scanner", "plugin_id", "scope", "justification", "author", "added_at", "expires_at"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+

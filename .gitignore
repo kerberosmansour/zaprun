@@ -1,0 +1,29 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+*.profraw
+
+# Editor / IDE state
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Env / secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Local scratch / temp
+.tmp/
+tmp/
+scratch/
+output/
+
+# CLI / agent state
+.claude/*
+!.claude/settings.json
+.codex/

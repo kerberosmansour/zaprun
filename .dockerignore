@@ -1,0 +1,6 @@
+target/
+output/
+.git/
+.dast-spike-cache/
+*.zap-temp/
+

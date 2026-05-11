@@ -1,0 +1,6 @@
+[upstream]
+image = "ghcr.io/kerberosmansour/wapiti"
+digest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+checked_at = "2026-05-06"
+note = "Placeholder until Wapiti container invocation is enabled in CI."
+

@@ -1,0 +1,32 @@
+[[targets]]
+name = "secure-smoke-service"
+kind = "vendored-rust-binary"
+source = "../SunLitSecurityLibraries/crates/secure_smoke_service"
+build_command = "cargo build --release -p secure_smoke_service"
+launch_command = "./target/release/secure_smoke_service"
+health_url = "http://127.0.0.1:3001/health"
+expected_high_findings = "0"
+
+[[targets]]
+name = "juice-shop"
+kind = "docker-image"
+image = "bkimminich/juice-shop@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+host_port = 3000
+container_port = 3000
+expected_high_findings = ">10"
+
+[[targets]]
+name = "nodegoat"
+kind = "docker-image"
+image = "nirocr/nodegoat@sha256:1384d404f1eb89ba218a5988cccde902bb6b606e3ec70f60b185183f9639c392"
+host_port = 4000
+container_port = 4000
+expected_high_findings = "4..12"
+
+[[targets]]
+name = "vulnerable-app"
+kind = "docker-image"
+image = "ghcr.io/kerberosmansour/vulnerable-app@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+host_port = 9090
+container_port = 8080
+expected_high_findings = ">5"

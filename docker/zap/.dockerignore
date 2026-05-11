@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!entrypoint.sh
+!policies/
+!policies/**
+!scripts/
+!scripts/**
+

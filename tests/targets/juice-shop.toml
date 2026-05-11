@@ -1,0 +1,6 @@
+name = "juice-shop"
+image = "bkimminich/juice-shop@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+health_url = "http://127.0.0.1:3000/"
+expected_high_findings_min = 10
+expected_high_findings_max = 100
+

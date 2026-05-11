@@ -1,0 +1,41 @@
+env:
+  contexts:
+    - name: dast-spike-pr
+      urls:
+        - http://host.docker.internal.*
+  parameters:
+    failOnError: true
+    failOnWarning: false
+jobs:
+  - type: passiveScan-config
+    parameters:
+      scanOnlyInScope: true
+      spider.thread: 1
+  - type: script
+    parameters:
+      action: add
+      type: passive
+      engine: Graal.js
+      name: cwe-79-dom-taint-flow
+      file: /zap/scripts/passive/cwe-79-dom-taint-flow.js
+      enabled: true
+  - type: activeScan-policy
+    parameters:
+      name: dast-spike-pr
+    rules:
+      - id: 40026
+        name: Cross Site Scripting (DOM Based)
+        threshold: "OFF"
+      - id: 10003
+        name: Vulnerable JS Library
+        threshold: "MEDIUM"
+  - type: requestor
+    parameters:
+      spider.thread: 1
+      permissionPolicyDeny:
+        - Java.type
+        - Polyglot.eval
+        - org.graalvm.polyglot.*
+        - Context.create
+        - Engine.create
+

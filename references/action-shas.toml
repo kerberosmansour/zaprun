@@ -1,0 +1,8 @@
+[actions]
+checkout = "de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+upload_artifact = "ea165f8d65b6e75b540449e92b4886f43607fa02"
+cache = "0057852bfaa89a56745cba8c7296529d2fc39830"
+rust_toolchain = "29eef336d9b2848a0b548edc03f92a220660cdb8"
+setup_buildx = "e468171a9de216ec08956ac3ada2f0791b6bd435"
+docker_login = "4907a6ddec9925e35a0a9e82d7399ccc52663121"
+attest_build_provenance = "e8998f949152b193b063cb0ec769d69d929409be"

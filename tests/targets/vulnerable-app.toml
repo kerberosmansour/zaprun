@@ -1,0 +1,6 @@
+name = "vulnerable-app"
+image = "ghcr.io/kerberosmansour/vulnerable-app@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+health_url = "http://127.0.0.1:9090/"
+expected_high_findings_min = 5
+expected_high_findings_max = 100
+

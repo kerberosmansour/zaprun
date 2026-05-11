@@ -1,0 +1,33 @@
+# Trivy CVE ignore list — accepts only CVEs whose fix is gated on an upstream
+# bump we cannot pull into ticket-8's scope. Each entry MUST be paired with:
+#   * the bundled-package origin (which add-on / which layer)
+#   * the upstream-fixed-version
+#   * the tracking issue for the upstream bump
+#
+# Cadence: every entry below has a hard `expires_or_review_by` date in the
+# tracking issue. When that date passes the entry should be re-evaluated.
+# Removal should happen the moment the upstream bump lands.
+#
+# This file is read by Trivy's `--ignorefile` flag — both `trivy image` and
+# `trivy fs`. The format is one CVE ID per line; '#' starts a comment.
+
+# CVE-2026-42583 — Netty Lz4FrameDecoder resource-exhaustion.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.133.Final.
+#   Cannot be patched in our image without rebundling the add-on; the fix
+#   needs to come from ZAP shipping a network-beta release that bundles
+#   newer Netty (or the standalone Network add-on once it goes stable).
+#   Tracking: TODO — file follow-up issue + paste the number here.
+CVE-2026-42583
+
+# CVE-2025-24970 — Netty SslHandler does not correctly validate packets,
+#   can lead to a native crash.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-handler 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.118.Final.
+#   Same constraint as CVE-2026-42583 — fix requires upstream ZAP add-on
+#   rebundle. The Dast.Spike image only exposes ZAP's network add-on to
+#   the host via the scanner container's egress; the SslHandler attack
+#   surface here is the proxy port (8080 in the container) and is not
+#   exposed to untrusted callers in our CI/CLI usage.
+#   Tracking: TODO — file follow-up issue + paste the number here.
+CVE-2025-24970

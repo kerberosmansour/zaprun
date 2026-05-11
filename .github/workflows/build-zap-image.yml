@@ -1,0 +1,154 @@
+name: Build ZAP Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker/zap/**
+      - crates/zaprun/**
+      - Cargo.toml
+      - Cargo.lock
+      - references/zap-image-pin.toml
+  pull_request:
+    paths:
+      - docker/zap/**
+      - crates/zaprun/**
+      - Cargo.toml
+      - Cargo.lock
+      - references/zap-image-pin.toml
+      - .github/workflows/build-zap-image.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/kerberosmansour/zaprun
+  TRIVY_IMAGE: docker.io/aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build base runtime
+        run: docker buildx build -f docker/zap/Dockerfile --target base-runtime --load -t zaprun:base-runtime .
+      - name: Scan base runtime
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.trivyignore:/etc/trivy/.trivyignore:ro" \
+            "$TRIVY_IMAGE" image --severity HIGH,CRITICAL --scanners vuln \
+              --ignorefile /etc/trivy/.trivyignore \
+              --exit-code 1 zaprun:base-runtime
+      - name: Build final image
+        run: docker buildx build -f docker/zap/Dockerfile --load -t "$IMAGE_NAME:${GITHUB_SHA}" .
+      - name: Smoke test final image
+        run: |
+          set -euo pipefail
+          IMAGE="$IMAGE_NAME:${GITHUB_SHA}"
+          # Existing smokes — preserved as-is.
+          docker run --rm --entrypoint java "$IMAGE" -version
+          docker run --rm --entrypoint /opt/zap/zap.sh "$IMAGE" -version
+          docker run --rm --entrypoint id "$IMAGE" | grep 'uid=1000(zap)'
+          docker run --rm --entrypoint /usr/local/bin/zap-api-scan.py "$IMAGE" -h >/tmp/zap-api-scan-help.txt
+          grep 'Usage: zap-api-scan.py' /tmp/zap-api-scan-help.txt
+          # Ticket #2: zaprun baked-in CLI smokes.
+          docker run --rm --entrypoint stat "$IMAGE" -c '%U %G %a' /usr/local/bin/zaprun | grep -E '^zap zap 0?755$'
+          docker run --rm "$IMAGE" zaprun --help >/tmp/zaprun-root-help.txt
+          grep -F 'Examples:'   /tmp/zaprun-root-help.txt
+          grep -F 'Exit codes:' /tmp/zaprun-root-help.txt
+          for sub in scan api doctor plan observe calibrate explain; do
+            docker run --rm "$IMAGE" zaprun "$sub" --help >"/tmp/zaprun-$sub-help.txt"
+            grep -F 'Examples:' "/tmp/zaprun-$sub-help.txt"
+          done
+          # Legacy entrypoint regression: bare invocation must still exit 2 with the canonical error.
+          legacy_out="$(docker run --rm "$IMAGE" 2>&1 || true)"
+          echo "$legacy_out" | grep -F -- '--target is required'
+          # Argv-injection abuse case: shell metacharacters MUST be treated as literal $1.
+          inject_out="$(docker run --rm "$IMAGE" 'zaprun; echo PWNED' 2>&1 || true)"
+          echo "$inject_out" | grep -F 'unknown argument: zaprun; echo PWNED'
+          # The legitimate error line ends in "PWNED" because the entrypoint
+          # echoes the literal $1 verbatim. The abuse case is when shell-injected
+          # `echo PWNED` runs as a separate command, producing a standalone
+          # `PWNED` line. Match line-exact (-Fx), not "ends with PWNED".
+          ! echo "$inject_out" | grep -Fqx 'PWNED'
+      - name: Scan final image
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.trivyignore:/etc/trivy/.trivyignore:ro" \
+            "$TRIVY_IMAGE" image --severity HIGH,CRITICAL --scanners vuln \
+              --ignorefile /etc/trivy/.trivyignore \
+              --exit-code 1 "$IMAGE_NAME:${GITHUB_SHA}"
+      - name: Scan extracted ZAP add-ons
+        run: |
+          set -euo pipefail
+          rm -rf .tmp/zap-addons
+          mkdir -p .tmp/zap-addons
+          # The image runs as USER 1000 per the Dockerfile. The bind-mount
+          # below is owned by the runner's UID, so the container can't write
+          # to it without world-writable permission on the temp dir. The dir
+          # is freshly created above and removed at job end, so 0777 is fine.
+          chmod 0777 .tmp/zap-addons
+          docker run --rm \
+            -v "$PWD/.tmp/zap-addons:/zap-addons" \
+            --entrypoint /bin/sh \
+            "$IMAGE_NAME:${GITHUB_SHA}" \
+            -c '
+              set -eu
+              count=0
+              for addon in /opt/zap/plugin/*.zap; do
+                [ -e "$addon" ] || continue
+                name="$(basename "$addon" .zap)"
+                mkdir -p "/zap-addons/$name"
+                python3 -m zipfile -e "$addon" "/zap-addons/$name"
+                count=$((count + 1))
+              done
+              echo "extracted_addons=${count}"
+              test "$count" -gt 0
+            '
+          docker run --rm \
+            -v "$PWD/.tmp/zap-addons:/scan:ro" \
+            -v "$PWD/.trivyignore:/etc/trivy/.trivyignore:ro" \
+            "$TRIVY_IMAGE" fs --severity HIGH,CRITICAL --scanners vuln \
+              --ignorefile /etc/trivy/.trivyignore \
+              --exit-code 1 /scan
+      - name: Push image
+        id: push
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE_NAME:${GITHUB_SHA}"
+          digest="$(docker buildx imagetools inspect "$IMAGE_NAME:${GITHUB_SHA}" | awk '/^Digest:/ {print $2; exit}')"
+          test -n "$digest"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Attest build provenance
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
