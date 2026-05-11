@@ -143,7 +143,9 @@ jobs:
               --exit-code 1 /scan
       - name: Push image
         id: push
-        if: github.event_name == 'push'
+        # Push on real pushes to main AND on workflow_dispatch (consistent with
+        # the sign-and-attest gate below). PRs never push.
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           docker push "$IMAGE_NAME:${GITHUB_SHA}"
