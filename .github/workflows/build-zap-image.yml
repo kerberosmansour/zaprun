@@ -154,9 +154,12 @@ jobs:
   sign-and-attest:
     # SLSA Build L3 isolation: this reusable workflow is the only place that
     # holds `id-token: write`. Build cannot mint OIDC tokens for signing; only
-    # this downstream job can.
+    # this downstream job can. Runs on real pushes AND on `workflow_dispatch`
+    # so the signing path is testable on demand without forcing a fake push.
+    # Pull requests are excluded — re-signing on every PR commit would mint
+    # attestations for ephemeral images.
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/sign-and-attest.yml
     with:
       subject-name: ghcr.io/kerberosmansour/zaprun
