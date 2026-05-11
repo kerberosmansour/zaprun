@@ -23,7 +23,7 @@ fn check_fails_on_expired_suppression() {
     std::fs::write(
         &baseline,
         r#"{
-          "$schema": "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/baseline-v1.json",
+          "$schema": "https://github.com/kerberosmansour/zaprun/blob/main/schema/baseline-v1.json",
           "schema_version": "1.0",
           "suppressions": [{
             "scanner": "zap",

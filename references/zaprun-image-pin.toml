@@ -1,9 +1,8 @@
 # zaprun Docker backend image pin
 #
-# The zaprun Docker backend (M2+) MUST run only digest-pinned images.  The
-# `parsed` form `<repo>@sha256:<64-hex>` is enforced by `ImageRef::parse` in
-# `crates/zaprun/src/image_ref.rs`.  Refer to RUNBOOK-DAST-SPIKE-ZAPRUN.md M1
-# for the contract.
+# The zaprun Docker backend MUST run only digest-pinned images.  The parsed
+# form `<repo>@sha256:<64-hex>` is enforced by `ImageRef::parse` in
+# `crates/zaprun/src/image_ref.rs`.
 #
 # For local Docker-backed testing this points at the repo-local image name that
 # Docker can resolve by digest after `docker build -t zaprun:dev

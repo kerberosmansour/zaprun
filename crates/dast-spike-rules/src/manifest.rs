@@ -74,7 +74,7 @@ impl Manifest {
     pub fn m1(image_digest: String, upstream_image_digest: String, generated_at: String) -> Self {
         Self {
             schema:
-                "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/manifest-v1.json"
+                "https://github.com/kerberosmansour/zaprun/blob/main/schema/manifest-v1.json"
                     .to_string(),
             schema_version: "1.0".to_string(),
             generated_at,

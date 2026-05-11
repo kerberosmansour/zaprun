@@ -219,7 +219,7 @@ pub mod sarif {
                         "driver": {
                             "name": tool_name,
                             "version": tool_version,
-                            "informationUri": "https://github.com/kerberosmansour/Dast.Spike"
+                            "informationUri": "https://github.com/kerberosmansour/zaprun"
                         }
                     },
                     "results": results,

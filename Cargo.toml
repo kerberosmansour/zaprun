@@ -9,7 +9,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/kerberosmansour/Dast.Spike"
+repository = "https://github.com/kerberosmansour/zaprun"
 rust-version = "1.82"
 
 [workspace.dependencies]

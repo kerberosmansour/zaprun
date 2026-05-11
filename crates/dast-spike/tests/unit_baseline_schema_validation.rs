@@ -4,7 +4,7 @@ use dast_spike_rules::{BaselineDocument, Suppression, SuppressionScope};
 #[test]
 fn valid_baseline_schema_loads() {
     let json = r#"{
-      "$schema": "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/baseline-v1.json",
+      "$schema": "https://github.com/kerberosmansour/zaprun/blob/main/schema/baseline-v1.json",
       "schema_version": "1.0",
       "suppressions": [{
         "scanner": "zap",

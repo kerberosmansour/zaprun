@@ -43,7 +43,7 @@ pub fn emit_sarif(reports: &[NormalizedReport]) -> Value {
             "tool": {
                 "driver": {
                     "name": "dast-spike",
-                    "informationUri": "https://github.com/kerberosmansour/Dast.Spike",
+                    "informationUri": "https://github.com/kerberosmansour/zaprun",
                     "rules": rules
                 }
             },

@@ -53,7 +53,7 @@ impl BaselineDocument {
     pub fn empty() -> Self {
         Self {
             schema:
-                "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/baseline-v1.json"
+                "https://github.com/kerberosmansour/zaprun/blob/main/schema/baseline-v1.json"
                     .to_string(),
             schema_version: "1.0".to_string(),
             suppressions: Vec::new(),
