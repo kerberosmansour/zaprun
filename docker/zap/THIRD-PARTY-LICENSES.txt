@@ -1,0 +1,115 @@
+Third-party licenses bundled in ghcr.io/kerberosmansour/zaprun
+
+This file enumerates the licenses of every component baked into the hardened
+ZAP container image. Three categories:
+
+  1. Wolfi base + apk packages installed at build time
+  2. OWASP ZAP runtime + Java-bundled dependencies + add-ons
+  3. zaprun CLI (Rust binary)
+
+The authoritative per-package license metadata also lives inside the image
+at /usr/share/doc/<pkg>/copyright (or equivalent paths under /usr/share/licenses)
+for each Wolfi-installed package. The list below is intentionally
+human-readable; regenerate from the image with:
+
+    docker run --rm --entrypoint sh ghcr.io/kerberosmansour/zaprun@sha256:<digest> \
+      -c 'for d in /usr/share/doc/*/copyright /usr/share/licenses/*/LICENSE*; do
+            [ -e "$d" ] && { echo "=== $d ==="; cat "$d"; echo; }
+          done'
+
+================================================================================
+1. Wolfi base image + apk packages installed in docker/zap/Dockerfile
+================================================================================
+
+Base image
+   wolfi-base (digest-pinned in docker/zap/Dockerfile)
+   License: Apache License 2.0
+   Project: https://github.com/wolfi-dev/os
+
+apk packages added in `apk add` (alphabetical):
+
+   bash                              GPL-3.0-or-later
+   ca-certificates                   MPL-2.0 (source) + CDLA-Permissive-2.0 (compiled bundle)
+   curl                              curl (MIT/X-style)
+   firefox-docker-selenium-compat    MPL-2.0
+   fontconfig                        MIT-style (Keith Packard)
+   gnutar                            GPL-3.0-or-later
+   gzip                              GPL-3.0-or-later
+   openjdk-26-jre                    GPL-2.0-with-classpath-exception
+   py3.13-pyyaml                     MIT
+   py3.13-setuptools-79              MIT
+   py3.13-six                        MIT
+   py3.13-zaproxy                    Apache-2.0
+   python-3.13                       PSF-2.0 (Python Software Foundation License)
+   tini                              MIT
+   ttf-dejavu                        Bitstream Vera + Public Domain
+
+Every package above is installed from the Wolfi APK index; per-package
+SOURCE locations are recorded by the Wolfi build system at
+https://github.com/wolfi-dev/os and reproducible from the package's `.melange.yaml`.
+
+================================================================================
+2. OWASP ZAP runtime + Java add-ons + helper scripts
+================================================================================
+
+ZAP release tarball
+   OWASP Zed Attack Proxy (ZAP) 2.17.0
+   License: Apache License 2.0
+   Source:  https://github.com/zaproxy/zaproxy/releases/tag/v2.17.0
+   Pin:     docker/zap/Dockerfile ENV ZAP_RELEASE_SHA256 / ZAP_RELEASE_TAG
+   Notice:  The ZAP release tarball bundles a large number of Java
+            dependencies; the Apache-2.0 NOTICE shipped with each ZAP
+            release is preserved at /opt/zap/NOTICE inside the image.
+
+ZAP Network add-on (replacement, bundled)
+   network-beta-0.27.0
+   License: Apache License 2.0
+   Source:  https://github.com/zaproxy/zap-extensions/tree/main/addOns/network
+   Pin:     docker/zap/Dockerfile ENV ZAP_NETWORK_ADDON_SHA256
+   Notice:  Bundles io.netty:netty-codec and io.netty:netty-handler.
+            Two HIGH CVEs in the bundled Netty version (CVE-2026-42583 and
+            CVE-2025-24970) are currently suppressed in `.trivyignore`
+            pending an upstream ZAP add-on rebundle. The threat-model
+            justification is documented in .trivyignore.
+
+ZAP Docker helper scripts (checksum-pinned)
+   zap-api-scan.py, zap-baseline.py, zap-full-scan.py, zap_common.py
+   License: Apache License 2.0
+   Source:  https://github.com/zaproxy/zaproxy/tree/main/docker
+   Pin:     docker/zap/Dockerfile (sha256sum -c after curl -fsSL)
+
+ZAP policy + scripts (checksum-pinned)
+   policies/API-Minimal.policy
+   scripts/scripts/httpsender/Alert_on_HTTP_Response_Code_Errors.js
+   scripts/scripts/httpsender/Alert_on_Unexpected_Content_Types.js
+   License: Apache License 2.0
+   Source:  same upstream repo as above
+   Pin:     docker/zap/Dockerfile
+
+================================================================================
+3. zaprun Rust workspace
+================================================================================
+
+The Rust workspace (`crates/zaprun`, `crates/dast-spike`, `crates/dast-spike-rules`)
+is MIT-licensed (see LICENSE in the repo root).
+
+The transitive Rust dependency tree is governed by `deny.toml`, which:
+
+   * Allows: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, CC0-1.0,
+            Unlicense, Zlib, Unicode-DFS-2016, CDLA-Permissive-2.0 (for
+            webpki-roots), MPL-2.0.
+   * Forbids: copyleft licenses (GPL/AGPL/LGPL) — these are not present in
+              the resolved graph at the time of writing.
+
+To audit the workspace dependencies from a fresh clone:
+
+    cargo deny check licenses
+
+The full transitive license list is too large to enumerate statically; run
+`cargo metadata --format-version=1` to extract it programmatically.
+
+================================================================================
+
+This file is human-curated and updated whenever a Wolfi package, ZAP version,
+or ZAP add-on is bumped in `docker/zap/Dockerfile`. Re-validate after every
+such bump.

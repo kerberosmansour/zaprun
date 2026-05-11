@@ -1,0 +1,72 @@
+zaprun
+Copyright (c) 2026 Sherif Mansour
+
+This product is licensed under the MIT License — see LICENSE.
+
+This product bundles, depends on, or uses third-party software with separate
+licenses. The most-significant components are enumerated below; the full
+list of Wolfi-base packages and ZAP add-on Java dependencies is in
+`docker/zap/THIRD-PARTY-LICENSES.txt`.
+
+================================================================================
+OWASP Zed Attack Proxy (ZAP)
+   https://www.zaproxy.org/
+   License: Apache License 2.0
+   Notice:  This product includes software developed by the
+            OWASP Zed Attack Proxy project (https://www.zaproxy.org/).
+            The Apache License 2.0 NOTICE that ships with each release tarball
+            is preserved at /opt/zap/NOTICE inside the hardened image.
+================================================================================
+Wolfi base image
+   https://github.com/wolfi-dev/os
+   License: Apache License 2.0
+   Notice:  Wolfi is a community Linux (un)distribution. Per-package licenses
+            are individually preserved at /usr/share/doc/<pkg>/copyright (or
+            equivalent) inside the image. The headline package licenses are
+            in docker/zap/THIRD-PARTY-LICENSES.txt.
+================================================================================
+Mozilla CA certificate bundle (via ca-certificates Wolfi package)
+   https://wiki.mozilla.org/CA/Included_Certificates
+   License: Mozilla Public License 2.0 (MPL-2.0) for the source list;
+            CDLA-Permissive-2.0 for the compiled PEM bundle as redistributed
+            by Linux distributions.
+   Notice:  The Mozilla CA bundle is included in the image at
+            /etc/ssl/certs/ca-certificates.crt and is the trust anchor set
+            for outbound HTTPS verification.
+================================================================================
+webpki-roots (Rust crate, transitive dependency)
+   https://github.com/rustls/webpki-roots
+   License: CDLA-Permissive-2.0
+   Notice:  Compiled-in trust anchor set used by `rustls` for outbound TLS
+            inside the `zaprun` CLI.
+================================================================================
+OpenJDK
+   https://openjdk.org/
+   License: GNU General Public License v2.0 with Classpath Exception (GPL-2.0-with-classpath-exception)
+   Notice:  OpenJDK is the JVM that runs ZAP inside the hardened image.
+            Distributed in the image via the Wolfi `openjdk-26-jre` package.
+================================================================================
+OWASP ZAP Network add-on (network-beta)
+   https://github.com/zaproxy/zap-extensions/tree/main/addOns/network
+   License: Apache License 2.0
+   Notice:  Bundled at image-build time and checksum-pinned in the Dockerfile.
+            Subsumes obsolete legacy network code; brings the modern netty
+            stack into the ZAP runtime.
+================================================================================
+Firefox + geckodriver (via firefox-docker-selenium-compat Wolfi package)
+   https://www.mozilla.org/firefox/
+   License: Mozilla Public License 2.0 (MPL-2.0)
+   Notice:  Used by ZAP's Selenium-backed crawler for browser-mode scanning.
+================================================================================
+ZAP Docker helper scripts (zap-api-scan.py, zap-baseline.py, zap-full-scan.py, zap_common.py)
+   https://github.com/zaproxy/zaproxy/tree/main/docker
+   License: Apache License 2.0
+   Notice:  Pulled from the upstream ZAP repository at image build, each
+            checksum-pinned in `docker/zap/Dockerfile`. The container's
+            `dast-spike-entrypoint` invokes `zap-baseline.py` / `zap-api-scan.py`
+            with explicit `-z` options.
+================================================================================
+
+For licenses of all Rust workspace dependencies, run
+`cargo deny check licenses` against the workspace; the policy in `deny.toml`
+enumerates the permitted license set.
