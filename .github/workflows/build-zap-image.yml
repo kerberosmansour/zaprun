@@ -34,10 +34,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
+      # SLSA Build L3 isolation: build job MUST NOT hold `id-token: write`
+      # (signing is the only place that needs it; lives in the reusable
+      # sign-and-attest workflow called below).
       contents: read
       packages: write
-      id-token: write
-      attestations: write
+    outputs:
+      # Surfaced to the sign-and-attest job so it can mint a build-provenance
+      # attestation bound to the just-pushed digest.
+      image-digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -145,10 +150,18 @@ jobs:
           digest="$(docker buildx imagetools inspect "$IMAGE_NAME:${GITHUB_SHA}" | awk '/^Digest:/ {print $2; exit}')"
           test -n "$digest"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-      - name: Attest build provenance
-        if: github.event_name == 'push'
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+
+  sign-and-attest:
+    # SLSA Build L3 isolation: this reusable workflow is the only place that
+    # holds `id-token: write`. Build cannot mint OIDC tokens for signing; only
+    # this downstream job can.
+    needs: build
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/sign-and-attest.yml
+    with:
+      subject-name: ghcr.io/kerberosmansour/zaprun
+      subject-digest: ${{ needs.build.outputs.image-digest }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write

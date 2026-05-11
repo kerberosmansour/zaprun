@@ -1,0 +1,39 @@
+name: Sign and Attest
+
+# SLSA Build L3 isolation: the only workflow that holds `id-token: write` is
+# this reusable one. The caller (build-zap-image.yml) MUST NOT hold
+# `id-token` itself, so a compromised build step cannot mint OIDC tokens for
+# signing.
+#
+# Invoked by `.github/workflows/build-zap-image.yml` after a successful push
+# of a fresh image digest to GHCR.
+
+on:
+  workflow_call:
+    inputs:
+      subject-name:
+        description: Image reference WITHOUT the digest, e.g. ghcr.io/kerberosmansour/zaprun
+        required: true
+        type: string
+      subject-digest:
+        description: sha256 digest of the pushed image, e.g. sha256:abc...
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  sign-and-attest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-name: ${{ inputs.subject-name }}
+          subject-digest: ${{ inputs.subject-digest }}
+          push-to-registry: true
