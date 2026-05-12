@@ -11,5 +11,5 @@
 # crates do not drift.
 
 repo = "zaprun"
-sha256 = "9a0f117fa3be7e6493a4f81268742174758f91604e1d948074204cb0bef40711"
-note = "local managed ZAP image digest used by zaprun Docker backend testing; publish flow can retarget repo to ghcr.io/kerberosmansour/zaprun"
+sha256 = "1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649"
+note = "v0.1.0 release digest — first publicly signed and attested image at ghcr.io/kerberosmansour/zaprun. Future releases auto-bump this field via release.yml's bump-pins job."
