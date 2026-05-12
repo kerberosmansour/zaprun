@@ -138,3 +138,135 @@ jobs:
             echo ""
             echo "No \`:latest\` tag is published. Pin by digest."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  bump-pins:
+    # Post-release: if the just-released digest differs from what's pinned
+    # in `references/zap-image-pin.toml` `[ours]` or
+    # `references/zaprun-image-pin.toml`, open a PR updating both files
+    # so consumers can pull the latest signed digest by following main.
+    # Pre-release tags (vX.Y.Z-foo) intentionally do not bump pins —
+    # only stable releases drive the pin.
+    needs: retag
+    if: needs.retag.result == 'success' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install crane
+        run: |
+          set -euo pipefail
+          VERSION="v0.20.6"
+          curl -sSfL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin crane
+      - name: Resolve digest for this release
+        id: digest
+        env:
+          IMAGE_NAME: ghcr.io/kerberosmansour/zaprun
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME}"
+          digest="$(crane digest "${IMAGE_NAME}:${ref}")"
+          test -n "$digest"
+          # Strip the `sha256:` prefix for the zaprun-image-pin.toml `sha256` field.
+          digest_hex="${digest#sha256:}"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "digest_hex=${digest_hex}" >> "$GITHUB_OUTPUT"
+      - name: Update pin files (in place; create-pull-request will branch + PR)
+        env:
+          NEW_DIGEST: ${{ steps.digest.outputs.digest }}
+          NEW_DIGEST_HEX: ${{ steps.digest.outputs.digest_hex }}
+          REF_NAME: ${{ github.ref_name }}
+          TODAY: ${{ github.event.head_commit.timestamp }}
+        run: |
+          set -euo pipefail
+          # references/zap-image-pin.toml — update [ours] section's digest +
+          # checked_at + note. Use a python script (TOML-aware enough for
+          # this constrained shape) to avoid regex bugs.
+          python3 - <<'PY'
+          import os, re, pathlib
+          from datetime import datetime, timezone
+          new_digest = os.environ["NEW_DIGEST"]
+          ref_name = os.environ["REF_NAME"]
+          today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+          p = pathlib.Path("references/zap-image-pin.toml")
+          text = p.read_text()
+          # Replace only inside the [ours] block.
+          parts = re.split(r"(^\[[^\]]+\]\s*$)", text, flags=re.MULTILINE)
+          out = []
+          in_ours = False
+          for part in parts:
+              if part.strip() == "[ours]":
+                  in_ours = True
+                  out.append(part)
+              elif re.match(r"^\[[^\]]+\]\s*$", part):
+                  in_ours = False
+                  out.append(part)
+              elif in_ours:
+                  part = re.sub(r'^digest = ".*"$', f'digest = "{new_digest}"', part, flags=re.MULTILINE)
+                  part = re.sub(r'^checked_at = ".*"$', f'checked_at = "{today}"', part, flags=re.MULTILINE)
+                  part = re.sub(
+                      r'^note = ".*"$',
+                      f'note = "Bumped by release {ref_name} via .github/workflows/release.yml bump-pins job."',
+                      part, flags=re.MULTILINE
+                  )
+                  out.append(part)
+              else:
+                  out.append(part)
+          p.write_text("".join(out))
+
+          # references/zaprun-image-pin.toml — single top-level sha256 field.
+          new_hex = os.environ["NEW_DIGEST_HEX"]
+          p2 = pathlib.Path("references/zaprun-image-pin.toml")
+          text2 = p2.read_text()
+          text2 = re.sub(r'^sha256 = ".*"$', f'sha256 = "{new_hex}"', text2, flags=re.MULTILINE)
+          text2 = re.sub(
+              r'^note = ".*"$',
+              f'note = "Bumped by release {ref_name} via .github/workflows/release.yml bump-pins job."',
+              text2, flags=re.MULTILINE
+          )
+          p2.write_text(text2)
+
+          print(f"Pin files updated to digest {new_digest}")
+          PY
+          echo "--- references/zap-image-pin.toml diff ---"
+          git diff references/zap-image-pin.toml | head -30
+          echo "--- references/zaprun-image-pin.toml diff ---"
+          git diff references/zaprun-image-pin.toml | head -10
+      - name: Open auto-bump PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+        with:
+          title: "chore(release-${{ github.ref_name }}): bump zaprun image pin to ${{ steps.digest.outputs.digest }}"
+          commit-message: |
+            chore: bump zaprun image pin to ${{ steps.digest.outputs.digest }}
+
+            Auto-generated by release.yml's bump-pins job after release
+            ${{ github.ref_name }} retagged successfully.
+
+            Source: ghcr.io/kerberosmansour/zaprun:${{ github.ref_name }}
+            Digest: ${{ steps.digest.outputs.digest }}
+          branch: chore/bump-zaprun-pin-${{ github.ref_name }}
+          delete-branch: true
+          labels: |
+            deps
+            release-bump
+          body: |
+            Auto-bump of the canonical zaprun image pin to the digest just
+            released as `${{ github.ref_name }}`.
+
+            **Image**: `ghcr.io/kerberosmansour/zaprun:${{ github.ref_name }}`
+            **Digest**: `${{ steps.digest.outputs.digest }}`
+
+            Verify before merging:
+            ```bash
+            gh attestation verify \
+              oci://ghcr.io/kerberosmansour/zaprun@${{ steps.digest.outputs.digest }} \
+              --repo kerberosmansour/zaprun
+            ```
