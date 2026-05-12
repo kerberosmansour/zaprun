@@ -52,14 +52,13 @@ jobs:
           gh workflow run build-zap-image.yml --ref main
           echo "Dispatched."
       - name: Trivy auto-clear-on-resolved-CVE check
-        # Pulls the most recent published image (`:edge` — same digest as
-        # the latest main build) and runs Trivy without --ignorefile, so we
-        # can see what's actually flagged. Cross-references against the
-        # `.trivyignore` entries: a CVE no longer in Trivy's output is a
-        # candidate for removal from the suppression list (the upstream
-        # bump that fixes it has either landed in our bundled deps OR the
-        # CVE has been retracted upstream — either way the suppression is
-        # no longer load-bearing).
+        # Pulls the CANONICAL pinned image (from `references/zap-image-pin.toml`'s
+        # `[ours].digest`) and runs Trivy without --ignorefile, so we can see
+        # what's actually flagged. Cross-references against `.trivyignore`:
+        # a CVE no longer in Trivy's output is a candidate for removal from
+        # the suppression list (the upstream bump that fixes it has either
+        # landed in our bundled deps OR the CVE has been retracted upstream
+        # — either way the suppression is no longer load-bearing).
         # This is detection only — manual review + PR is still required to
         # remove the line, since "no longer flagged in THIS scan" can be a
         # transient (Trivy DB caught up later) and we don't want the
@@ -74,6 +73,16 @@ jobs:
             exit 0
           fi
 
+          # Resolve the canonical [ours].digest from the pin file. release.yml's
+          # bump-pins job keeps this current with the latest stable release.
+          PIN_DIGEST="$(awk -F'"' '/^\[ours\]/{f=1} f && /^digest = /{print $2; exit}' references/zap-image-pin.toml)"
+          if [ -z "$PIN_DIGEST" ]; then
+            echo "  (could not resolve [ours].digest from references/zap-image-pin.toml — skipping)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          IMAGE_REF="${IMAGE_NAME}@${PIN_DIGEST}"
+          echo "Scanning canonical pinned image: ${IMAGE_REF}"
+
           mkdir -p .tmp/trivy-output
           chmod 0777 .tmp/trivy-output
 
@@ -87,7 +96,7 @@ jobs:
               --format json \
               --output /out/scan.json \
               --exit-code 0 \
-              "${IMAGE_NAME}:edge"
+              "${IMAGE_REF}"
 
           # Also scan extracted ZAP add-ons (the CVE bundle source for our
           # currently-suppressed Netty entries).
@@ -97,7 +106,7 @@ jobs:
           docker run --rm \
             -v "$PWD/.tmp/zap-addons:/zap-addons" \
             --entrypoint /bin/sh \
-            "${IMAGE_NAME}:edge" \
+            "${IMAGE_REF}" \
             -c '
               set -eu
               for addon in /opt/zap/plugin/*.zap; do
