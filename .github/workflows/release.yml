@@ -62,6 +62,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install crane
+        # `crane tag` preserves the manifest digest when adding a new tag.
+        # `docker buildx imagetools create --tag` REBUILDS the manifest,
+        # which produces a new digest and detaches the new tag from the
+        # signatures + attestations bound to the source digest. crane is
+        # the canonical OCI-aware re-tag tool.
+        run: |
+          set -euo pipefail
+          VERSION="v0.20.6"
+          curl -sSfL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin crane
+          crane version
       - name: Resolve source SHA-tagged image
         id: src
         env:
@@ -69,30 +81,36 @@ jobs:
         run: |
           set -euo pipefail
           # The tag points at a commit; the build workflow tags the image
-          # with the full commit SHA. Resolve via the GitHub API to handle
-          # annotated vs lightweight tags consistently.
+          # with the full commit SHA. GITHUB_SHA on a tag-push event is the
+          # commit the tag points to.
           commit_sha="${GITHUB_SHA}"
           src_ref="${IMAGE_NAME}:${commit_sha}"
           echo "Resolved source image: $src_ref"
-          # Confirm the source image exists in GHCR before retagging.
-          docker buildx imagetools inspect "$src_ref" >/dev/null
-          digest="$(docker buildx imagetools inspect "$src_ref" --format '{{json .Manifest}}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
+          # Resolve to a digest (proves the source exists; gives us the
+          # immutable reference signatures + attestations are bound to).
+          digest="$(crane digest "$src_ref")"
+          test -n "$digest"
           echo "src_ref=${src_ref}" >> "$GITHUB_OUTPUT"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-      - name: Add semver tags
+      - name: Add semver tags (digest-preserving)
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           SRC_REF: ${{ steps.src.outputs.src_ref }}
+          DIGEST: ${{ steps.src.outputs.digest }}
           PATCH_TAG: ${{ steps.semver.outputs.patch_tag }}
           MINOR_TAG: ${{ steps.semver.outputs.minor_tag }}
           MAJOR_TAG: ${{ steps.semver.outputs.major_tag }}
           IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
         run: |
           set -euo pipefail
-          docker buildx imagetools create --tag "${IMAGE_NAME}:${PATCH_TAG}" "$SRC_REF"
+          # `crane tag` only adds the new tag to the existing manifest —
+          # the digest is the SAME as the source. So signatures and
+          # attestations bound to the source digest apply to every new
+          # tag form without re-signing.
+          crane tag "${IMAGE_NAME}@${DIGEST}" "${PATCH_TAG}"
           if [ "$IS_PRERELEASE" != "true" ]; then
-            docker buildx imagetools create --tag "${IMAGE_NAME}:${MINOR_TAG}" "$SRC_REF"
-            docker buildx imagetools create --tag "${IMAGE_NAME}:${MAJOR_TAG}" "$SRC_REF"
+            crane tag "${IMAGE_NAME}@${DIGEST}" "${MINOR_TAG}"
+            crane tag "${IMAGE_NAME}@${DIGEST}" "${MAJOR_TAG}"
           fi
       - name: Summary
         env:
