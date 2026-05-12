@@ -1,0 +1,73 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":pinDigests",
+    ":separatePatchReleases"
+  ],
+  "schedule": [
+    "before 8am on Monday"
+  ],
+  "timezone": "Etc/UTC",
+  "labels": [
+    "deps"
+  ],
+  "prConcurrentLimit": 4,
+  "prHourlyLimit": 2,
+  "configMigration": true,
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 8am on Monday"
+    ]
+  },
+  "cargo": {
+    "enabled": true
+  },
+  "github-actions": {
+    "enabled": true,
+    "pinDigests": true
+  },
+  "dockerfile": {
+    "enabled": true,
+    "pinDigests": true
+  },
+  "packageRules": [
+    {
+      "description": "Group all tokio crates",
+      "matchManagers": ["cargo"],
+      "matchPackagePatterns": ["^tokio"],
+      "groupName": "tokio"
+    },
+    {
+      "description": "Group all serde crates",
+      "matchManagers": ["cargo"],
+      "matchPackagePatterns": ["^serde"],
+      "groupName": "serde"
+    },
+    {
+      "description": "Group all SunLit security crates together",
+      "matchManagers": ["cargo"],
+      "matchPackagePatterns": ["^secure_", "^security_"],
+      "groupName": "sunlit-security-crates"
+    },
+    {
+      "description": "Group GHA SHA pin updates by action family",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "automerge": false
+    },
+    {
+      "description": "Group cosign / sigstore tooling together",
+      "matchManagers": ["github-actions"],
+      "matchPackagePatterns": ["sigstore/", "actions/attest"],
+      "groupName": "sigstore-attestation"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "enabled": true
+  }
+}

@@ -1,0 +1,119 @@
+name: Scheduled image rebuild
+
+# Weekly rebuild of ghcr.io/kerberosmansour/zaprun against the current state
+# of main, so that Wolfi base + ZAP add-on + transitive Rust dep CVE
+# disclosures get re-scanned by Trivy on a fixed cadence.
+#
+# What this workflow does:
+#   1. Dispatch `build-zap-image.yml` against main (which rebuilds, scans,
+#      pushes a new SHA-tagged image, signs + attests it).
+#   2. Emit a job summary listing each `.trivyignore` entry's tracking
+#      issue and its age, so the founder can see at a glance which
+#      suppressions have aged beyond the 60-day review cadence documented
+#      in `.trivyignore`.
+#
+# The "open auto-bump PR for the pin files" step in the publish runbook's
+# M6 contract is deferred — that requires diffing the post-build digest
+# against the canonical pin and is complex enough to warrant its own
+# follow-up. The scheduled rebuild here delivers the cadence + visibility;
+# the diff-and-PR-bump can follow.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Mondays 06:00 UTC.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write  # to dispatch build-zap-image.yml
+      issues: read    # to inspect tracking issue ages for stale-warning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Dispatch build-zap-image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching build-zap-image.yml against main..."
+          gh workflow run build-zap-image.yml --ref main
+          echo "Dispatched."
+      - name: Stale .trivyignore review
+        # For every CVE entry in `.trivyignore`, find the linked tracking
+        # issue (referenced by `#<num>` in the comment block above the CVE
+        # ID), pull its created_at via the GH API, and warn if the issue
+        # is open and > 60 days old. Doesn't fail the run — informational.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Stale-.trivyignore review"
+            echo ""
+            echo "Cadence: each .trivyignore entry is expected to be re-evaluated within 60 days of its tracking issue's open date."
+            echo ""
+            echo "| CVE | Tracking issue | Open since | Age (days) | Status |"
+            echo "|---|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Parse .trivyignore: each non-comment line is a CVE id. The
+          # block above it is its comment header containing `#<num>` issue
+          # link. The two CVE entries currently in the file both point at
+          # the same tracking issue (#11) — the loop below tolerates a 1:N
+          # mapping.
+          if [ ! -f .trivyignore ]; then
+            echo "No .trivyignore present; nothing to review." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          today_epoch=$(date -u +%s)
+          last_issue_block=""
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^# ]]; then
+              last_issue_block+="${line}"$'\n'
+              continue
+            fi
+            if [[ -z "$line" ]]; then
+              last_issue_block=""
+              continue
+            fi
+            cve="$line"
+            # Extract first `#<num>` from the comment block above the CVE.
+            issue_num="$(echo "$last_issue_block" | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)"
+            if [ -z "$issue_num" ]; then
+              echo "| \`${cve}\` | (no tracking issue link found) | — | — | ⚠ MISSING TRACKING |" >> "$GITHUB_STEP_SUMMARY"
+              last_issue_block=""
+              continue
+            fi
+            issue_json="$(gh api "/repos/${GITHUB_REPOSITORY}/issues/${issue_num}" 2>/dev/null || echo '{}')"
+            created_at="$(echo "$issue_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("created_at",""))')"
+            state="$(echo "$issue_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("state",""))')"
+            if [ -z "$created_at" ]; then
+              echo "| \`${cve}\` | #${issue_num} (not found) | — | — | ⚠ ISSUE MISSING |" >> "$GITHUB_STEP_SUMMARY"
+              last_issue_block=""
+              continue
+            fi
+            opened_epoch=$(python3 -c "from datetime import datetime; import sys; print(int(datetime.fromisoformat('${created_at}'.replace('Z','+00:00')).timestamp()))")
+            age_days=$(( (today_epoch - opened_epoch) / 86400 ))
+            status_icon="✅ within window"
+            if [ "$state" = "closed" ]; then
+              status_icon="🎯 closed — review .trivyignore entry for removal"
+            elif [ "$age_days" -gt 60 ]; then
+              status_icon="⚠️ STALE — exceeded 60-day cadence"
+            fi
+            echo "| \`${cve}\` | #${issue_num} | ${created_at} | ${age_days} | ${status_icon} |" >> "$GITHUB_STEP_SUMMARY"
+            last_issue_block=""
+          done < <(grep -vE '^\s*(#|$)' .trivyignore)
