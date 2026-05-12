@@ -63,7 +63,7 @@ cosign verify \
 
 | Path | Purpose |
 |---|---|
-| [`crates/zaprun/`](crates/zaprun/) | The CLI. Subcommands: `scan`, `triage`, `api`, `doctor`, `plan`, `observe`, `calibrate`, `explain`. |
+| [`crates/zaprun/`](crates/zaprun/) | The CLI. Subcommands: `scan`, `api`, `doctor`, `plan`, `observe`, `calibrate`, `explain` (see [docs/zaprun-cli.md](docs/zaprun-cli.md)). |
 | [`crates/dast-spike/`](crates/dast-spike/) | A higher-level orchestrator that wraps `zaprun` plus Nuclei and Wapiti. |
 | [`crates/dast-spike-rules/`](crates/dast-spike-rules/) | Typed schemas + a curated CWE → scanner-rule mapping. |
 | [`docker/zap/Dockerfile`](docker/zap/Dockerfile) | The hardened image. Wolfi base, ZAP from official tarball with SHA-256 pin, add-ons bundled at build time, Trivy-scanned in CI. |
