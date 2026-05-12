@@ -48,3 +48,22 @@ jobs:
           subject-name: ${{ inputs.subject-name }}
           subject-digest: ${{ inputs.subject-digest }}
           push-to-registry: true
+      - name: Download SBOMs from build job
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: sboms
+          path: .
+      - name: Attest SPDX-JSON SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e
+        with:
+          subject-name: ${{ inputs.subject-name }}
+          subject-digest: ${{ inputs.subject-digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+      - name: Attest CycloneDX-JSON SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e
+        with:
+          subject-name: ${{ inputs.subject-name }}
+          subject-digest: ${{ inputs.subject-digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true
