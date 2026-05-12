@@ -173,3 +173,6 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+      # Needed because the reusable workflow pushes the attestation manifest
+      # back to GHCR via `push-to-registry: true`.
+      packages: write

@@ -30,7 +30,18 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+      # `push-to-registry: true` below stores the attestation manifest in
+      # GHCR alongside the image. This job runs on a fresh runner (separate
+      # from build) so it needs its own GHCR credentials — hence the Login
+      # step + packages: write.
+      packages: write
     steps:
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
