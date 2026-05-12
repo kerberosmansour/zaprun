@@ -51,6 +51,111 @@ jobs:
           echo "Dispatching build-zap-image.yml against main..."
           gh workflow run build-zap-image.yml --ref main
           echo "Dispatched."
+      - name: Trivy auto-clear-on-resolved-CVE check
+        # Pulls the most recent published image (`:edge` — same digest as
+        # the latest main build) and runs Trivy without --ignorefile, so we
+        # can see what's actually flagged. Cross-references against the
+        # `.trivyignore` entries: a CVE no longer in Trivy's output is a
+        # candidate for removal from the suppression list (the upstream
+        # bump that fixes it has either landed in our bundled deps OR the
+        # CVE has been retracted upstream — either way the suppression is
+        # no longer load-bearing).
+        # This is detection only — manual review + PR is still required to
+        # remove the line, since "no longer flagged in THIS scan" can be a
+        # transient (Trivy DB caught up later) and we don't want the
+        # scheduled job to flap.
+        env:
+          IMAGE_NAME: ghcr.io/kerberosmansour/zaprun
+          TRIVY_IMAGE: docker.io/aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e
+        run: |
+          set -euo pipefail
+          if [ ! -f .trivyignore ]; then
+            echo "  (no .trivyignore — skipping auto-clear check)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          mkdir -p .tmp/trivy-output
+          chmod 0777 .tmp/trivy-output
+
+          # Run trivy WITHOUT --ignorefile to see the unfiltered HIGH+CRITICAL set.
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.tmp/trivy-output:/out" \
+            "$TRIVY_IMAGE" image \
+              --severity HIGH,CRITICAL \
+              --scanners vuln \
+              --format json \
+              --output /out/scan.json \
+              --exit-code 0 \
+              "${IMAGE_NAME}:edge"
+
+          # Also scan extracted ZAP add-ons (the CVE bundle source for our
+          # currently-suppressed Netty entries).
+          rm -rf .tmp/zap-addons
+          mkdir -p .tmp/zap-addons
+          chmod 0777 .tmp/zap-addons
+          docker run --rm \
+            -v "$PWD/.tmp/zap-addons:/zap-addons" \
+            --entrypoint /bin/sh \
+            "${IMAGE_NAME}:edge" \
+            -c '
+              set -eu
+              for addon in /opt/zap/plugin/*.zap; do
+                [ -e "$addon" ] || continue
+                name="$(basename "$addon" .zap)"
+                mkdir -p "/zap-addons/$name"
+                python3 -m zipfile -e "$addon" "/zap-addons/$name"
+              done
+            '
+          docker run --rm \
+            -v "$PWD/.tmp/zap-addons:/scan:ro" \
+            -v "$PWD/.tmp/trivy-output:/out" \
+            "$TRIVY_IMAGE" fs \
+              --severity HIGH,CRITICAL \
+              --scanners vuln \
+              --format json \
+              --output /out/scan-addons.json \
+              --exit-code 0 \
+              /scan
+
+          # Collect all CVE IDs that Trivy still flags (image + add-ons).
+          flagged="$(python3 -c '
+          import json
+          flagged = set()
+          for f in [".tmp/trivy-output/scan.json", ".tmp/trivy-output/scan-addons.json"]:
+              try:
+                  with open(f) as fh:
+                      data = json.load(fh)
+                  for res in data.get("Results", []) or []:
+                      for vuln in res.get("Vulnerabilities", []) or []:
+                          vid = vuln.get("VulnerabilityID")
+                          if vid:
+                              flagged.add(vid)
+              except FileNotFoundError:
+                  pass
+          for v in sorted(flagged):
+              print(v)
+          ')"
+
+          {
+            echo ""
+            echo "## Auto-clear-on-resolved-CVE check"
+            echo ""
+            echo "For every \`.trivyignore\` entry, check whether Trivy still flags it on the most recent \`:edge\` build."
+            echo ""
+            echo "| Suppressed CVE | Still flagged by Trivy? | Action |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS= read -r cve; do
+            cve="$(echo "$cve" | xargs)"
+            [ -z "$cve" ] && continue
+            if echo "$flagged" | grep -qFx "$cve"; then
+              echo "| \`${cve}\` | ✅ yes — keep suppressed | (no change) |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`${cve}\` | 🎯 NO LONGER FLAGGED | candidate for removal — manually verify Trivy DB freshness then drop the \`.trivyignore\` line + close the tracking issue |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < <(grep -vE '^\s*(#|$)' .trivyignore)
       - name: Stale .trivyignore review
         # For every CVE entry in `.trivyignore`, find the linked tracking
         # issue (referenced by `#<num>` in the comment block above the CVE
