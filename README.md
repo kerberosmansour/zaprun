@@ -2,23 +2,93 @@
 
 Reproducible DAST scans with a deterministic CLI and a hardened OWASP ZAP image.
 
-This is the public home of the `zaprun` Rust CLI and the `ghcr.io/kerberosmansour/zaprun` container image. Both are pinned by digest, the image is built from a Wolfi base with the ZAP release tarball and add-ons checksum-pinned at build time, and the entrypoint dispatches its argv via literal-string-equality (no shell evaluation of attacker-controlled input).
+[![v0.1.0](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/kerberosmansour/zaprun/releases/tag/v0.1.0)
+[![image](https://img.shields.io/badge/ghcr.io-zaprun-blue?logo=docker)](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-The repository is in early-stage public release. A first signed and attested image tag is forthcoming.
+`zaprun` is a small Rust CLI that drives OWASP ZAP through Automation Framework plans, plus a Wolfi-based ZAP container image that bakes the CLI in. It targets a few hard requirements:
 
-## Layout
+- **Digest-pinned scans.** The CLI's `--image` flag refuses non-digest references, and the image's Dockerfile checksum-pins its ZAP release tarball + every helper script + the bundled add-ons.
+- **Stable artifact contract.** Every run writes the same files (`plan.yaml`, `run.json`, `summary.json`, `coverage.json`, `capabilities.json`, `observations.json`, plus ZAP's JSON/HTML/SARIF reports) so CI gates and humans can reason about results the same way.
+- **No reliance on live add-on installs at scan time.** The image bundles the add-ons it needs at build time, so a scan can run on a sealed network.
+- **Reasonable defaults for CI.** The image uses a non-root UID, no extra capabilities, and a literal-string-equality entrypoint dispatch that does not eval its arguments.
 
-- `crates/zaprun/` — the CLI.
-- `crates/dast-spike/` — orchestrator that wraps `zaprun` plus Nuclei and Wapiti.
-- `crates/dast-spike-rules/` — typed schemas for the artifact contract.
-- `docker/zap/Dockerfile` — the hardened image.
-- `.github/workflows/build-zap-image.yml` — publish workflow.
-- `.github/workflows/ci.yml` — `cargo fmt`, `clippy`, workspace tests on every push.
-- `templates/dast-workflow.yml` — workflow skeleton emitted into a target repo by `dast-spike init`.
-- `references/*.toml` — pinned digests for upstream artefacts.
-- `schema/` — JSON schemas for the artifact contract.
+## Quick start
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for components, data flow, and trust boundaries. See [SECURITY.md](SECURITY.md) for the supply-chain controls and vulnerability disclosure.
+```bash
+docker run --rm \
+  -v "$PWD/output:/zap/wrk/output" \
+  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
+```
+
+The image's entrypoint dispatches on the first argument: `zaprun` hands off to the baked-in CLI; anything else falls through to a legacy entrypoint that accepts `--target` / `--output-dir` / `--policy` flags for backwards compatibility with existing ZAP harnesses.
+
+Full subcommand reference, exit codes, and the artifact-contract schemas are in [docs/zaprun-cli.md](docs/zaprun-cli.md).
+
+## Verifying a release
+
+Every published image digest is signed (cosign keyless via Sigstore Fulcio + Rekor) and carries three attestations — SLSA Build Provenance v1, an SPDX-JSON SBOM, and a CycloneDX-JSON SBOM. The signing happens in an isolated reusable workflow that holds `id-token: write` (the build job does not), per SLSA Build L3 guidance.
+
+```bash
+# Anyone can pull — the GHCR package is public.
+docker pull ghcr.io/kerberosmansour/zaprun:v0.1.0
+
+# Verify SLSA Build Provenance + SBOMs.
+gh attestation verify \
+  oci://ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649 \
+  --repo kerberosmansour/zaprun
+
+# Verify the cosign keyless signature.
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/kerberosmansour/zaprun/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649
+```
+
+## Image tags
+
+| Tag | Source | Stability |
+|---|---|---|
+| `@sha256:<64-hex>` | every push to main; every release | immutable — pin here in production |
+| `:<full-git-sha>` | every push to main | immutable |
+| `:edge` | every push to main | floating — re-points to the most recent main commit |
+| `:v0.1.0` | release tag | immutable per release |
+| `:v0.1`, `:v0` | release tag (skipped for pre-releases) | floating — re-points to the latest patch / minor |
+| `:latest` | **NEVER PUBLISHED** | n/a |
+
+[SECURITY.md](SECURITY.md) has the full tagging-convention rationale and verification snippets.
+
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| [`crates/zaprun/`](crates/zaprun/) | The CLI. Subcommands: `scan`, `triage`, `api`, `doctor`, `plan`, `observe`, `calibrate`, `explain`. |
+| [`crates/dast-spike/`](crates/dast-spike/) | A higher-level orchestrator that wraps `zaprun` plus Nuclei and Wapiti. |
+| [`crates/dast-spike-rules/`](crates/dast-spike-rules/) | Typed schemas + a curated CWE → scanner-rule mapping. |
+| [`docker/zap/Dockerfile`](docker/zap/Dockerfile) | The hardened image. Wolfi base, ZAP from official tarball with SHA-256 pin, add-ons bundled at build time, Trivy-scanned in CI. |
+| [`.github/workflows/build-zap-image.yml`](.github/workflows/build-zap-image.yml) | Build + scan + push (and tag `:edge` on main). |
+| [`.github/workflows/sign-and-attest.yml`](.github/workflows/sign-and-attest.yml) | Reusable workflow that signs the image and attests the build provenance + both SBOMs. Holds `id-token: write` (the build job does not — SLSA L3 isolation). |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | Triggered on tag push (`v*`). Adds semver tags via `crane tag` so the digest (and therefore signatures + attestations) is preserved. |
+| [`.github/workflows/scheduled-image-rebuild.yml`](.github/workflows/scheduled-image-rebuild.yml) | Weekly (Mondays 06:00 UTC). Rebuilds + re-scans the image so newly-disclosed CVEs in the bundled deps surface promptly. Also audits `.trivyignore` entries against their tracking-issue age. |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | `cargo fmt --check`, `clippy -D warnings`, full workspace tests on every push and PR. |
+| [`.github/renovate.json`](.github/renovate.json) | Renovate config — Cargo workspace, SHA-pinned GHA actions, Dockerfile, with grouping for tokio / serde / sigstore / SunLit-security crates. |
+| [`templates/dast-workflow.yml`](templates/dast-workflow.yml) | Workflow skeleton emitted into a target repo by `dast-spike init`. |
+| [`references/*.toml`](references/) | Pinned digests for upstream artefacts (Wolfi base / ZAP image / Nuclei templates / GHA action SHAs). |
+| [`schema/`](schema/) | JSON schemas for the artifact contract. |
+| [`.trivyignore`](.trivyignore) | Explicit CVE suppressions with rationale + tracking-issue references; reviewed weekly by `scheduled-image-rebuild.yml`. |
+
+## Status
+
+`v0.1.0` is the first public release. Image is signed + attested, package is public, verification snippets above work today.
+
+The repo follows `v<major>.<minor>.<patch>` tagging via [release.yml](.github/workflows/release.yml). There is no `:latest` image tag — consumers are expected to pin by digest.
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — components, data flow, and trust boundaries.
+- [SECURITY.md](SECURITY.md) — supply-chain controls and vulnerability disclosure.
+- [`docs/zaprun-cli.md`](docs/zaprun-cli.md) — full CLI manual.
 
 ## License
 
