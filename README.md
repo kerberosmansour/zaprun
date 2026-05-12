@@ -2,6 +2,7 @@
 
 Reproducible DAST scans with a deterministic CLI and a hardened OWASP ZAP image.
 
+[![crates.io](https://img.shields.io/crates/v/zaprun.svg)](https://crates.io/crates/zaprun)
 [![v0.1.0](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/kerberosmansour/zaprun/releases/tag/v0.1.0)
 [![image](https://img.shields.io/badge/ghcr.io-zaprun-blue?logo=docker)](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -13,18 +14,40 @@ Reproducible DAST scans with a deterministic CLI and a hardened OWASP ZAP image.
 - **No reliance on live add-on installs at scan time.** The image bundles the add-ons it needs at build time, so a scan can run on a sealed network.
 - **Reasonable defaults for CI.** The image uses a non-root UID, no extra capabilities, and a literal-string-equality entrypoint dispatch that does not eval its arguments.
 
+## Install
+
+Three options, depending on your host:
+
+```bash
+# 1. CLI from crates.io (cross-platform: Linux / macOS / Windows).
+cargo install zaprun
+
+# 2. Prebuilt container image (linux/amd64; runs via emulation on macOS arm64).
+docker pull ghcr.io/kerberosmansour/zaprun:v0.1.0
+
+# 3. From source.
+git clone https://github.com/kerberosmansour/zaprun
+cargo build --release -p zaprun
+```
+
+At runtime the CLI drives Docker, so a working Docker daemon is required on the host regardless of how the CLI was installed.
+
 ## Quick start
 
 ```bash
+# Pull + run the image (no Rust toolchain needed):
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   ghcr.io/kerberosmansour/zaprun:v0.1.0 \
   zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
+
+# Or use the cargo-installed binary against a digest-pinned image:
+zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 ```
 
 The image's entrypoint dispatches on the first argument: `zaprun` hands off to the baked-in CLI; anything else falls through to a legacy entrypoint that accepts `--target` / `--output-dir` / `--policy` flags for backwards compatibility with existing ZAP harnesses.
 
-Full subcommand reference, exit codes, and the artifact-contract schemas are in [docs/zaprun-cli.md](docs/zaprun-cli.md).
+Full subcommand reference, exit codes, the artifact-contract schemas, end-to-end examples, and a per-platform support matrix are in the **[CLI manual](crates/zaprun/README.md)** (also published as the crate's landing page on [crates.io/crates/zaprun](https://crates.io/crates/zaprun)).
 
 ## Verifying a release
 

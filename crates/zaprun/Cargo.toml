@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+description = "Point-and-shoot ZAP CLI: deterministic Automation Framework runs against a digest-pinned OWASP ZAP image, stable artifact contract, stable exit codes."
+homepage = "https://github.com/kerberosmansour/zaprun"
+documentation = "https://github.com/kerberosmansour/zaprun/blob/main/crates/zaprun/README.md"
+readme = "README.md"
+keywords = ["dast", "security", "zap", "owasp", "ci"]
+categories = ["command-line-utilities", "development-tools::testing"]
 
 [dependencies]
 chrono.workspace = true
