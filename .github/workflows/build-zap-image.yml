@@ -155,6 +155,14 @@ jobs:
           digest="$(docker buildx imagetools inspect "$IMAGE_NAME:${GITHUB_SHA}" | awk '/^Digest:/ {print $2; exit}')"
           test -n "$digest"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Tag and push as :edge (main only)
+        # :edge tracks main HEAD. Semver tags (:vX.Y.Z / :vX.Y / :vX) are
+        # added by .github/workflows/release.yml on tag push. No :latest
+        # is ever published — per SECURITY.md, consumers MUST pin by digest.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --tag "$IMAGE_NAME:edge" "$IMAGE_NAME:${GITHUB_SHA}"
       - name: Generate SPDX-JSON SBOM
         # SBOMs are generated against the local image (pre-push has the layers
         # cached) and uploaded as a workflow artifact for sign-and-attest to

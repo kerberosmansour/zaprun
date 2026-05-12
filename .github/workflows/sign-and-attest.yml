@@ -67,3 +67,18 @@ jobs:
           subject-digest: ${{ inputs.subject-digest }}
           sbom-path: sbom.cdx.json
           push-to-registry: true
+      - name: Install cosign
+        # Keyless signing via Sigstore + GitHub OIDC. The OIDC token comes
+        # from the id-token: write permission this job holds; the signature
+        # certificate is issued by Fulcio (cert-identity = this workflow's
+        # URL), and the signature is transparency-logged in Rekor.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      - name: Cosign keyless sign by digest
+        # Signs `<subject-name>@<subject-digest>`; signature stored in GHCR
+        # at `<subject-name>:sha256-<hex>.sig`. Verifiable with:
+        #   cosign verify --certificate-identity-regexp '^https://github.com/kerberosmansour/zaprun/' \
+        #                 --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        #                 <subject-name>@<digest>
+        env:
+          SUBJECT: ${{ inputs.subject-name }}@${{ inputs.subject-digest }}
+        run: cosign sign --yes "$SUBJECT"

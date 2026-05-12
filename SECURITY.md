@@ -116,6 +116,39 @@ These constraints are enforced in CI by the structural-contract test fixture (`c
 - `dast-spike` does not log target HTTP responses. ZAP's report.json contains snippets of responses by design (evidence in alerts) — that file is uploaded as a workflow artefact and follows the consumer's retention policy. Documented limitation: do not run `dast-spike` against production targets carrying PII; use staging/test targets only.
 - The runner's logs (RUST_LOG=info default) carry only IDs, SHAs, rule names, and counts. No request bodies, no response bodies.
 
+## Image tagging convention
+
+The published image at `ghcr.io/kerberosmansour/zaprun` follows a strict tagging discipline:
+
+| Tag form | Source | Stability |
+|---|---|---|
+| `@sha256:<64-hex>` | every push to main; every release | immutable — bound to a single OCI manifest |
+| `:<full-git-sha>` | every push to main | immutable — added by `build-zap-image.yml` |
+| `:edge` | every push to main | floating — re-points to the most recent main commit |
+| `:vX.Y.Z` (e.g. `:v0.1.0`) | tag push `git push origin vX.Y.Z` | immutable per-release — added by `release.yml` |
+| `:vX.Y` (e.g. `:v0.1`) | tag push (excluded for pre-releases) | floating — re-points to the latest patch on that minor |
+| `:vX` (e.g. `:v0`) | tag push (excluded for pre-releases) | floating — re-points to the latest minor on that major |
+| **`:latest`** | **NEVER PUBLISHED** | n/a |
+
+**Pin by digest.** Consumers MUST pin to `ghcr.io/kerberosmansour/zaprun@sha256:<digest>` in CI, infrastructure, and image-pin files. The floating tags (`:edge`, `:vX.Y`, `:vX`) exist for ergonomic browsing, NOT for production pinning. The `dast-spike` CLI's `--image` flag refuses non-digest references (`crates/dast-spike/src/types.rs::ImageRef`).
+
+**Why no `:latest`.** The `:latest` convention is the single biggest cause of irreproducible CI image-pull behaviour; we never want a consumer to find a mystery `:latest` tag pointing at unknown content. Floating semver tags are the closest substitute and are bounded by explicit-versioned cadence.
+
+**Provenance and signature verification.** Every published digest is signed (cosign keyless via Fulcio + Rekor) and carries three attestations (SLSA Build Provenance, SPDX-JSON SBOM, CycloneDX-JSON SBOM). To verify a digest:
+
+```bash
+# Signature
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/kerberosmansour/zaprun/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/kerberosmansour/zaprun@sha256:<digest>
+
+# Build provenance attestation (and SBOMs)
+gh attestation verify \
+  oci://ghcr.io/kerberosmansour/zaprun@sha256:<digest> \
+  --repo kerberosmansour/zaprun
+```
+
 ## Vulnerability disclosure
 
 - Security issues should be reported privately. Open a [GitHub Security Advisory](https://github.com/kerberosmansour/zaprun/security/advisories/new) on this repo — **not** a public issue.

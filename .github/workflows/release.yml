@@ -1,0 +1,122 @@
+name: Release
+
+# Re-tag an existing SHA-tagged image with semver tags (vX.Y.Z, vX.Y, vX) on
+# tag push. The image itself is unchanged — `docker buildx imagetools create`
+# adds new tags pointing at the same OCI manifest, so signatures and
+# attestations bound to the digest apply to every tag.
+#
+# Expected flow:
+#   1. push to main → build-zap-image.yml builds + signs + attests
+#      `ghcr.io/kerberosmansour/zaprun:<git-sha>`.
+#   2. `git tag v0.1.0 <sha> && git push origin v0.1.0` → this workflow fires.
+#   3. This workflow resolves the tag's commit sha, locates the
+#      `ghcr.io/.../zaprun:<sha>` manifest, and adds the three semver tags.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/kerberosmansour/zaprun
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Parse semver from ref
+        id: semver
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME}"
+          # Strict semver match: v<digits>.<digits>.<digits>[-prerelease].
+          # Pre-releases (v0.1.0-rc1) skip the floating major/minor retags.
+          if [[ "$ref" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[A-Za-z0-9.-]+)?$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            prerel="${BASH_REMATCH[4]:-}"
+            echo "patch_tag=v${major}.${minor}.${patch}${prerel}" >> "$GITHUB_OUTPUT"
+            if [ -z "$prerel" ]; then
+              echo "minor_tag=v${major}.${minor}" >> "$GITHUB_OUTPUT"
+              echo "major_tag=v${major}" >> "$GITHUB_OUTPUT"
+            fi
+            echo "is_prerelease=$([ -n "$prerel" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $ref is not a valid semver tag (vX.Y.Z[-...]); refusing to retag." >&2
+            exit 1
+          fi
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve source SHA-tagged image
+        id: src
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          # The tag points at a commit; the build workflow tags the image
+          # with the full commit SHA. Resolve via the GitHub API to handle
+          # annotated vs lightweight tags consistently.
+          commit_sha="${GITHUB_SHA}"
+          src_ref="${IMAGE_NAME}:${commit_sha}"
+          echo "Resolved source image: $src_ref"
+          # Confirm the source image exists in GHCR before retagging.
+          docker buildx imagetools inspect "$src_ref" >/dev/null
+          digest="$(docker buildx imagetools inspect "$src_ref" --format '{{json .Manifest}}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
+          echo "src_ref=${src_ref}" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Add semver tags
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          SRC_REF: ${{ steps.src.outputs.src_ref }}
+          PATCH_TAG: ${{ steps.semver.outputs.patch_tag }}
+          MINOR_TAG: ${{ steps.semver.outputs.minor_tag }}
+          MAJOR_TAG: ${{ steps.semver.outputs.major_tag }}
+          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --tag "${IMAGE_NAME}:${PATCH_TAG}" "$SRC_REF"
+          if [ "$IS_PRERELEASE" != "true" ]; then
+            docker buildx imagetools create --tag "${IMAGE_NAME}:${MINOR_TAG}" "$SRC_REF"
+            docker buildx imagetools create --tag "${IMAGE_NAME}:${MAJOR_TAG}" "$SRC_REF"
+          fi
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.src.outputs.digest }}
+          PATCH_TAG: ${{ steps.semver.outputs.patch_tag }}
+          MINOR_TAG: ${{ steps.semver.outputs.minor_tag }}
+          MAJOR_TAG: ${{ steps.semver.outputs.major_tag }}
+          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          {
+            echo "## Release ${GITHUB_REF_NAME}"
+            echo ""
+            echo "Image digest (unchanged across all tags): \`${DIGEST}\`"
+            echo ""
+            echo "Tags added:"
+            echo "- \`${IMAGE_NAME}:${PATCH_TAG}\`"
+            if [ "$IS_PRERELEASE" != "true" ]; then
+              echo "- \`${IMAGE_NAME}:${MINOR_TAG}\`"
+              echo "- \`${IMAGE_NAME}:${MAJOR_TAG}\`"
+            fi
+            echo ""
+            echo "Pre-existing tags on this digest (signatures + attestations apply via digest):"
+            echo "- \`${IMAGE_NAME}:${GITHUB_SHA}\` (build-time SHA tag)"
+            echo ""
+            echo "No \`:latest\` tag is published. Pin by digest."
+          } >> "$GITHUB_STEP_SUMMARY"
