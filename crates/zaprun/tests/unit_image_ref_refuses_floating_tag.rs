@@ -27,10 +27,7 @@ fn refuses_non_hex_digest() {
 
 #[test]
 fn accepts_valid_digest_reference() {
-    let s = format!(
-        "ghcr.io/kerberosmansour/zaprun@sha256:{}",
-        "a".repeat(64)
-    );
+    let s = format!("ghcr.io/kerberosmansour/zaprun@sha256:{}", "a".repeat(64));
     let parsed = ImageRef::parse(&s).expect("valid digest reference must parse");
     let ImageRef::Digest { repo, sha256_hex } = parsed;
     assert_eq!(repo, "ghcr.io/kerberosmansour/zaprun");

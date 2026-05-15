@@ -1,4 +1,4 @@
-use crate::{Result, RulesError};
+use super::{Result, TunerError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -99,24 +99,24 @@ impl Manifest {
 
     pub fn validate(&self) -> Result<()> {
         let digest_re = Regex::new(r"^sha256:[0-9a-f]{64}$").map_err(|err| {
-            RulesError::Validation(format!("internal digest regex failed to compile: {err}"))
+            TunerError::Validation(format!("internal digest regex failed to compile: {err}"))
         })?;
         if !digest_re.is_match(&self.image_digest) {
-            return Err(RulesError::Validation(
+            return Err(TunerError::Validation(
                 "image_digest must match ^sha256:[0-9a-f]{64}$".to_string(),
             ));
         }
         if !digest_re.is_match(&self.upstream_image_digest) {
-            return Err(RulesError::Validation(
+            return Err(TunerError::Validation(
                 "upstream_image_digest must match ^sha256:[0-9a-f]{64}$".to_string(),
             ));
         }
         if let Some(sha) = &self.threat_model_sha {
             let sha_re = Regex::new(r"^[0-9a-f]{40}$").map_err(|err| {
-                RulesError::Validation(format!("internal sha regex failed to compile: {err}"))
+                TunerError::Validation(format!("internal sha regex failed to compile: {err}"))
             })?;
             if !sha_re.is_match(sha) {
-                return Err(RulesError::Validation(
+                return Err(TunerError::Validation(
                     "threat_model_sha must match ^[0-9a-f]{40}$".to_string(),
                 ));
             }

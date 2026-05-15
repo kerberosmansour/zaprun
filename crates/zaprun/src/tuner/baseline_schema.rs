@@ -1,4 +1,4 @@
-use crate::{Result, RulesError};
+use super::{Result, TunerError};
 use chrono::{Duration, NaiveDate};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -61,12 +61,12 @@ impl BaselineDocument {
 
     pub fn validate(&self, today: NaiveDate, allow_expired: bool) -> Result<BaselineSummary> {
         if self.schema_version != "1.0" {
-            return Err(RulesError::Validation(
+            return Err(TunerError::Validation(
                 "baseline schema_version must be 1.0".to_string(),
             ));
         }
         if self.suppressions.len() > BASELINE_HARD_LIMIT {
-            return Err(RulesError::Validation(format!(
+            return Err(TunerError::Validation(format!(
                 "baseline at hard limit {BASELINE_HARD_LIMIT}"
             )));
         }
@@ -78,15 +78,15 @@ impl BaselineDocument {
             suppression.validate()?;
             let key = suppression.natural_key();
             if !natural_keys.insert(key.clone()) {
-                return Err(RulesError::Validation(format!(
+                return Err(TunerError::Validation(format!(
                     "baseline natural key collision: {key}"
                 )));
             }
             if suppression.expires_at < today {
                 expired += 1;
                 if !allow_expired {
-                    return Err(RulesError::Validation(format!(
-                        "suppression expired: {} (expired {}); run 'dast-spike triage --review' to re-justify",
+                    return Err(TunerError::Validation(format!(
+                        "suppression expired: {} (expired {}); review and re-justify the zaprun baseline",
                         suppression.plugin_id, suppression.expires_at
                     )));
                 }
@@ -107,39 +107,39 @@ impl Suppression {
     pub fn validate(&self) -> Result<()> {
         let scanner_ok = matches!(self.scanner.as_str(), "zap" | "nuclei" | "wapiti");
         if !scanner_ok {
-            return Err(RulesError::Validation(format!(
+            return Err(TunerError::Validation(format!(
                 "scanner must be zap, nuclei, or wapiti: {}",
                 self.scanner
             )));
         }
         let plugin_re = Regex::new(r"^[A-Za-z0-9._:-]+$").map_err(|err| {
-            RulesError::Validation(format!("internal plugin id regex failed: {err}"))
+            TunerError::Validation(format!("internal plugin id regex failed: {err}"))
         })?;
         if !plugin_re.is_match(&self.plugin_id) {
-            return Err(RulesError::Validation(format!(
+            return Err(TunerError::Validation(format!(
                 "invalid plugin_id: {}",
                 self.plugin_id
             )));
         }
         if self.justification.trim().is_empty() {
-            return Err(RulesError::Validation(
+            return Err(TunerError::Validation(
                 "suppression justification must be non-empty".to_string(),
             ));
         }
         match &self.scope {
             SuppressionScope::UrlPattern { url_pattern } => {
                 Regex::new(url_pattern).map_err(|err| {
-                    RulesError::Validation(format!("invalid suppression url_pattern: {err}"))
+                    TunerError::Validation(format!("invalid suppression url_pattern: {err}"))
                 })?;
             }
             SuppressionScope::Global { global } => {
                 if !*global {
-                    return Err(RulesError::Validation(
+                    return Err(TunerError::Validation(
                         "global suppression scope must be true".to_string(),
                     ));
                 }
                 if self.justification.chars().count() < 80 {
-                    return Err(RulesError::Validation(format!(
+                    return Err(TunerError::Validation(format!(
                         "global suppression requires justification >= 80 chars; got {}",
                         self.justification.chars().count()
                     )));

@@ -1,0 +1,10 @@
+[package]
+name = "dast-verify"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "dast-verify"
+path = "src/main.rs"

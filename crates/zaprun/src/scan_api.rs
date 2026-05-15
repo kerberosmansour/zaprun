@@ -75,10 +75,7 @@ pub fn cmd_api(opts: &ApiOptions) -> Result<ExitCode, ZapshootError> {
         .map_err(|e| ZapshootError::Io(e.to_string()))?;
     std::fs::write(canonical_out.join("plan.yaml"), yaml)?;
 
-    let placeholder_image = format!(
-        "ghcr.io/kerberosmansour/zaprun@sha256:{}",
-        "0".repeat(64)
-    );
+    let placeholder_image = format!("ghcr.io/kerberosmansour/zaprun@sha256:{}", "0".repeat(64));
     let mut meta = RunMeta::new_with_random_api_key(&placeholder_image);
     meta.plan_path = Some(canonical_out.join("plan.yaml"));
     meta.write_to(&canonical_out.join("run.json"))?;

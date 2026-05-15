@@ -20,4 +20,3 @@ tempfile.workspace = true
 [lib]
 name = "dast_spike_rules"
 path = "src/lib.rs"
-

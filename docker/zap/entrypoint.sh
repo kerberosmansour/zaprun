@@ -5,16 +5,16 @@ set -euo pipefail
 # `docker run --rm <image> zaprun <args...>`, hand off to the baked-in CLI.
 # We compare $1 by literal string equality (no regex, no shell evaluation of
 # $1's contents) so attacker-controlled argv strings cannot inject commands.
-# Anything else falls through to the legacy --target/--output-dir/--policy
-# entrypoint below, which preserves the existing dast-spike-entrypoint contract.
+# Anything else falls through to the compatibility --target/--output-dir/--policy
+# scanner harness below.
 if [ "${1:-}" = "zaprun" ]; then
   shift
   exec /usr/local/bin/zaprun "$@"
 fi
 
 export _JAVA_OPTIONS="${_JAVA_OPTIONS:--Xmx4g -Xss2m -XX:+UseG1GC -XX:MaxGCPauseMillis=200}"
-export DAST_SPIKE_BROWSER_ID="${DAST_SPIKE_BROWSER_ID:-firefox-headless}"
-export DAST_SPIKE_DOM_XSS_ENABLED="${DAST_SPIKE_DOM_XSS_ENABLED:-0}"
+export ZAPRUN_BROWSER_ID="${ZAPRUN_BROWSER_ID:-firefox-headless}"
+export ZAPRUN_DOM_XSS_ENABLED="${ZAPRUN_DOM_XSS_ENABLED:-0}"
 
 TARGET=""
 OUTPUT_DIR="/zap/wrk/output"
@@ -60,9 +60,9 @@ ZAP_OPTS=(
   "-config" "globalexcludeurl.url_list.url(0).enabled=true"
 )
 
-if [ "$DAST_SPIKE_DOM_XSS_ENABLED" = "1" ]; then
+if [ "$ZAPRUN_DOM_XSS_ENABLED" = "1" ]; then
   ZAP_OPTS+=(
-    "-config" "rules.domxss.browserid=${DAST_SPIKE_BROWSER_ID}"
+    "-config" "rules.domxss.browserid=${ZAPRUN_BROWSER_ID}"
     "-config" "scanner.scanPolicy.rule.40026.strength=LOW"
   )
 else

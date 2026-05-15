@@ -2,7 +2,7 @@
 
 `zaprun` is a point-and-shoot ZAP driver: it builds an OWASP ZAP Automation Framework plan, runs ZAP via a digest-pinned container, and writes a stable set of artifacts so CI gates and humans can reason about results the same way.
 
-This manual is the canonical reference for v0.1.0. It is generated against the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.1.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun) — every flag, default value, and example below is what `zaprun --help` and `zaprun <subcommand> --help` actually print.
+This manual is the canonical reference for v0.2.0. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.2.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
 
 ## Install
 
@@ -14,7 +14,7 @@ cargo install zaprun
 
 # 2. From the prebuilt image — no Rust toolchain needed. Linux-amd64-native;
 #    on macOS arm64 the image runs via Rosetta / QEMU emulation.
-docker pull ghcr.io/kerberosmansour/zaprun:v0.1.0
+docker pull ghcr.io/kerberosmansour/zaprun:v0.2.0
 
 # 3. From source.
 git clone https://github.com/kerberosmansour/zaprun
@@ -49,6 +49,9 @@ The Rust code is pure portable Rust (`rustls-tls`, no `native-tls`; `getrandom` 
   - [`scan`](#scan)
   - [`api`](#api)
   - [`observe`](#observe)
+  - [`init`](#init)
+  - [`rederive`](#rederive)
+  - [`triage-sarif`](#triage-sarif)
   - [`calibrate`](#calibrate)
   - [`explain`](#explain)
 - [Image entrypoint dispatch](#image-entrypoint-dispatch)
@@ -63,7 +66,9 @@ Two distribution surfaces:
 1. **Baked into the image** at `/usr/local/bin/zaprun`. Pull the digest-pinned image and invoke `zaprun` as the first argument. This is the canonical way to run scans — no host Rust toolchain required.
 2. **Built from source** by cloning the repo and running `cargo build --release -p zaprun`. The resulting binary lives at `target/release/zaprun`. Useful for development; for scans it's still better to use the image because the image bundles the matching ZAP runtime + add-ons + helper scripts.
 
-The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.1.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.2.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+
+`zaprun` does not depend on `dast-spike`; the `init`, `rederive`, `triage-sarif`, schema, SARIF, and path-safety code used by the public CLI lives inside this crate.
 
 ## Invocation patterns
 
@@ -72,11 +77,11 @@ The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.1.0`, `:e
 ```bash
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649 \
+  ghcr.io/kerberosmansour/zaprun@sha256:<digest> \
   zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 ```
 
-The first positional argument after the image ref selects the inner CLI: the entrypoint dispatches `zaprun` → the baked binary; anything else falls through to a legacy `dast-spike-entrypoint` that accepts `--target` / `--output-dir` / `--policy` for backwards compatibility with previous ZAP harnesses (see [image entrypoint dispatch](#image-entrypoint-dispatch) for the literal-equality rule).
+The first positional argument after the image ref selects the inner CLI: the entrypoint dispatches `zaprun` -> the baked binary; anything else falls through to the image's compatibility scan harness, which accepts `--target` / `--output-dir` / `--policy` for existing ZAP jobs (see [image entrypoint dispatch](#image-entrypoint-dispatch) for the literal-equality rule).
 
 ### From a local build
 
@@ -147,7 +152,7 @@ zaprun doctor
 zaprun doctor --probe-target http://localhost:3001
 
 # Validate a specific image digest is well-formed and pullable
-zaprun doctor --image ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649
+zaprun doctor --image ghcr.io/kerberosmansour/zaprun@sha256:<digest>
 ```
 
 Writes: `capabilities.json`.
@@ -180,7 +185,7 @@ zaprun plan http://localhost:3001 --dry-run --output output/zaprun-plan
 
 Writes: `plan.yaml`, `run.json`.
 
-Note: in v0.1.0 (MVP1), `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
+Note: in v0.2.0, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
 
 ### `scan`
 
@@ -220,7 +225,7 @@ zaprun scan https://example.test --passive
 
 # Pin a specific image digest (CI lane that wants reproducibility-by-digest)
 zaprun scan http://localhost:4000 --active \
-  --image ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649
+  --image ghcr.io/kerberosmansour/zaprun@sha256:<digest>
 
 # Direct output to a per-CI-job dir
 zaprun scan http://localhost:4000 --active --output output/zaprun-pr-1234
@@ -273,7 +278,7 @@ The inlined policy's SHA-256 is pinned as `API_MINIMAL_POLICY_INLINE_HASH` in `c
 
 ### `observe`
 
-Send a candidate request and observe ZAP alerts (M5). Useful for incident-response replay flows: take a request that reproduces a finding (from a bug-bounty report, an SAST-flagged path, a prior scan's evidence), replay it through ZAP's proxy, and capture the alerts ZAP raises.
+Send a candidate raw HTTP request and record replay evidence. Useful for incident-response and SAST-guided DAST flows: take a request that reaches a finding, replay it against a staging target, and capture whether the target responded before deciding how to tune scanner coverage.
 
 ```text
 Usage: zaprun observe [OPTIONS] --target <TARGET>
@@ -303,9 +308,55 @@ zaprun observe \
   --target https://example.test
 ```
 
-Writes: `observations.json`.
+Writes: `observations.json` with request/response evidence such as `request_sent`, `response_observed`, `request_path`, `http_status`, and `response_body_hash`. ZAP alert correlation can be layered on top of this evidence path; the replay artifact is already useful for proving that a SARIF finding has an HTTP-reachable request.
 
 **SSRF guard** — `observe`'s `--target` is the only `zaprun` flag with a network-trust-boundary check. Link-local addresses (169.254.0.0/16, the IMDS range) are unconditionally refused. RFC1918 (10/8, 172.16/12, 192.168/16) and loopback (127/8) require the explicit `--allow-internal-target` opt-in. The rationale is in `crates/zaprun/tests/unit_observe_ssrf_guard.rs`. The `scan` subcommand uses scheme-only validation because loopback is the headline scan target in CI.
+
+### `init`
+
+Bootstrap target-owned DAST configuration and a GitHub Actions workflow.
+
+```text
+Usage: zaprun init [OPTIONS]
+
+Options:
+      --target-dir <TARGET_DIR>              Target repository to receive .zaprun/ config and .github/workflows/dast.yml [default: .]
+      --deployment-target <DEPLOYMENT_TARGET> Runtime base URL the workflow should scan
+      --image <IMAGE>                        Optional image reference (`<repo>@sha256:<64-hex>`); defaults to the pinned digest
+  -h, --help                                 Print help
+```
+
+Writes `.zaprun/policy-pr.yml`, `.zaprun/policy-nightly.yml`, `.zaprun/baseline.json`, `.zaprun/rules.tsv`, `.zaprun/manifest.json`, and `.github/workflows/dast.yml`.
+
+### `rederive`
+
+Recompute target-owned DAST configuration when the threat model or approved image digest drifts from `.zaprun/manifest.json`.
+
+```text
+Usage: zaprun rederive [OPTIONS]
+
+Options:
+      --target-dir <TARGET_DIR>  Target repository containing .zaprun/manifest.json [default: .]
+  -h, --help                     Print help
+```
+
+When drift exists, `rederive` rewrites the generated files and opens one review PR with `gh pr create` from the target repository.
+
+### `triage-sarif`
+
+Classify SAST SARIF into endpoint x CWE guided DAST inputs.
+
+```text
+Usage: zaprun triage-sarif [OPTIONS] --sarif <SARIF>
+
+Options:
+      --target-dir <TARGET_DIR>  Target repository containing route/OpenAPI context [default: .]
+      --sarif <SARIF>            SARIF file to classify
+      --output <OUTPUT>          Output directory for triage-report.json/guided-scan-map.json/filtered.sarif [default: ./output/zaprun-triage-sarif]
+  -h, --help                     Print help
+```
+
+Writes `triage-report.json`, `guided-scan-map.json`, and `filtered.sarif`. SARIF remains evidence, not authority: authenticated findings stay `needs-human-input` until logged-in reachability is configured.
 
 ### `calibrate`
 
@@ -332,11 +383,11 @@ zaprun calibrate ./calibration/nodegoat.toml \
 
 Writes: calibration-results JSON in the output directory.
 
-In v0.1.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked in [Dast.Spike#5](https://github.com/kerberosmansour/Dast.Spike/issues/5) (private). The flag surface is stable.
+In v0.2.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
 
 ### `explain`
 
-Explain a previous run directory (MVP2 — placeholder in v0.1.0).
+Explain a previous run directory (placeholder in v0.2.0).
 
 ```text
 Usage: zaprun explain <RUN_DIR>
@@ -359,10 +410,10 @@ if [ "${1:-}" = "zaprun" ]; then
   shift
   exec /usr/local/bin/zaprun "$@"
 fi
-# Otherwise: fall through to dast-spike-entrypoint (the legacy --target/--output-dir/--policy harness).
+# Otherwise: fall through to the compatibility --target/--output-dir/--policy scan harness.
 ```
 
-The literal check (no regex, no case-fold, no `eval`) is a deliberate security property: shell metacharacters in `$1` are NEVER expanded. An invocation like `docker run … "zaprun; echo PWNED"` does NOT match `"zaprun"` and falls through to the legacy entrypoint, which rejects with `unknown argument: zaprun; echo PWNED`. The argv-injection abuse case is exercised in `.github/workflows/build-zap-image.yml`'s `Smoke test final image` step.
+The literal check (no regex, no case-fold, no `eval`) is a deliberate security property: shell metacharacters in `$1` are NEVER expanded. An invocation like `docker run … "zaprun; echo PWNED"` does NOT match `"zaprun"` and falls through to the compatibility scan harness, which rejects with `unknown argument: zaprun; echo PWNED`. The argv-injection abuse case is exercised in `.github/workflows/build-zap-image.yml`'s `Smoke test final image` step.
 
 ## Reaching the target from inside the scanner
 
@@ -390,7 +441,7 @@ mkdir -p output && chmod 0777 output
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun scan http://host.docker.internal:4000 \
     --active --profile spa-pr --scan-timeout 30m
 
@@ -414,7 +465,7 @@ docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v /tmp/openapi.yaml:/spec/openapi.yaml:ro \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun api /spec/openapi.yaml \
     --target http://host.docker.internal:3001 \
     --active
@@ -439,13 +490,36 @@ REQ
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v "$PWD/req.http:/in/req.http:ro" \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun observe \
     --request /in/req.http \
     --target https://staging.example.test
 ```
 
-`output/observations.json` carries the response + every alert ZAP raised when the request was replayed.
+`output/observations.json` carries replay evidence for the request and response. Use that evidence with `zaprun triage-sarif` and the DAST rule gate before promoting any scanner-rule change.
+
+### Example 3b: triage SARIF and gate a target-owned rule
+
+```bash
+zaprun triage-sarif \
+  --target-dir /path/to/webapp \
+  --sarif ./sast.sarif \
+  --output output/zaprun-triage
+
+cargo run --manifest-path xtasks/dast-verify/Cargo.toml -- gate \
+  --candidate ./candidate-rule.js \
+  --fixtures tests/synthetic-mocks \
+  --output output/dast-verify.json
+
+cargo run --manifest-path xtasks/dast-verify/Cargo.toml -- gate \
+  --candidate ./target-owned-rule.js \
+  --fixtures tests/synthetic-mocks \
+  --output output/target-rule.json \
+  --target-owned \
+  --target-output /path/to/webapp/.zaprun/scripts
+```
+
+Generic rule candidates must pass the gate before they belong in this repository. App-specific rules stay target-owned.
 
 ### Example 4: gate a PR on high-severity findings
 
@@ -453,7 +527,7 @@ docker run --rm \
 # Run the scan…
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun scan http://host.docker.internal:4000 --active
 SCAN_EXIT=$?
 
