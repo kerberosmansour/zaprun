@@ -45,10 +45,10 @@ The following are baked into every artefact this project emits and every change 
 - **Every `uses:` in any workflow we ship pins a 40-character SHA.** No tags, no branches, no short prefixes. The structural-contract test fixture rejects PRs that violate this.
 - **Every Docker image we publish is referenced by `@sha256:<digest>` in consumer-facing examples and in the workflow template.** No `:latest`, no `:stable`, no version tags. **We do not publish `:latest`** at all.
 - **Every Docker image we consume in our build (FROM lines, `docker/build-push-action` base images) is referenced by `@sha256:<digest>`.**
-- **Every third-party scanner rule/template pack we consume is pinned by immutable source revision.** Nuclei templates are read only from `references/nuclei-templates-pinned-sha.toml` and cached under `~/.cache/dast-spike/nuclei-templates/<SHA>/`; no branch, tag, or live `HEAD` template checkout is permitted in CI.
+- **Every third-party scanner rule/template pack we consume is pinned by immutable source revision.** Nuclei templates are read only from `references/nuclei-templates-pinned-sha.toml`; no branch, tag, or live `HEAD` template checkout is permitted in CI.
 - **Every published image carries SLSA L3 build provenance** via `actions/attest-build-provenance`. Consumers may verify with `cosign verify-attestation`; M5+ ships the verification gate as a workflow step.
 - **`packages: write` token is scoped to the build/publish job only** in our own workflows. No other job in this repo has write access to `ghcr.io/kerberosmansour/zaprun`.
-- **Bumping any pin (action SHA, image digest, ZAP upstream digest) is a PR-reviewed event.** `dast-spike bump-image` opens the bump as a PR with a diff of the image's tag-resolved contents. No silent drift.
+- **Bumping any pin (action SHA, image digest, ZAP upstream digest) is a PR-reviewed event.** Release automation opens image-pin bumps as PRs after a stable tag resolves to a signed digest. No silent drift.
 
 ### Workflow-emission discipline
 
@@ -64,7 +64,7 @@ Every `.github/workflows/dast.yml` we emit MUST satisfy:
 - `concurrency:` block present with `cancel-in-progress: true`.
 - `timeout-minutes:` present and ≤ 30 for PR scans, ≤ 60 for nightly.
 
-These constraints are enforced in CI by the structural-contract test fixture (`crates/dast-spike/tests/e2e_dast_workflow_contract.rs`), which parses the emitted YAML and asserts each property individually.
+These constraints are enforced in CI by structural-contract tests, which parse emitted YAML and assert each property individually.
 
 ### Container-runtime discipline
 
@@ -85,7 +85,7 @@ These constraints are enforced in CI by the structural-contract test fixture (`c
 
 - Symlink-traversal defence on every write into `.zaprun/` and `.github/workflows/`. Every path component verified to be a directory, not a symlink, before any write. Refuse with clear stderr if any component is a symlink.
 - File creation uses `O_NOFOLLOW`-equivalent semantics where the OS supports it.
-- Cache directory location: `~/.cache/dast-spike/zap-image/<DIGEST>/` per XDG. Per-digest isolation — bumping the pin writes a sibling directory; older digests are never overwritten in place.
+- Cache directory location: per-digest under the user's XDG cache directory. Per-digest isolation means bumping the pin writes a sibling directory; older digests are never overwritten in place.
 
 ### Parser discipline
 
@@ -93,7 +93,7 @@ These constraints are enforced in CI by the structural-contract test fixture (`c
 - **Finding-doc parser**: serde-typed front-matter with `deny_unknown_fields`. Free-text body sections are read but only re-emitted into other artefacts inside `~~~text` fences.
 - **`cwe-to-rules.toml` parser**: serde-typed with `deny_unknown_fields`; values constrained to closed enumerations or regex-validated strings. Free-text `note`/`wstg_ref` is fenced before any emission.
 - **Manifest emission**: no free-text from threat-model prose, finding-doc prose, or curated-table notes flows into JSON. Only IDs, SHAs, and closed-enumeration values.
-- **GitHub Step Summary emission**: every user-derived string rendered by `dast-spike check --github-summary` is placed inside a `~~~text` fence or equivalent context-specific Markdown escaping. No threat-model prose, finding-doc reason, or curated-table note may render as live Markdown.
+- **GitHub Step Summary emission**: every user-derived string rendered into GitHub summaries is placed inside a `~~~text` fence or equivalent context-specific Markdown escaping. No threat-model prose, finding-doc reason, or curated-table note may render as live Markdown.
 - **YAML parsing**: `serde_yaml_ng` default settings — no entity expansion, no anchor recursion. Reject any individual YAML file > 1 MiB before parse. Defends against billion-laughs and similar.
 
 ### Custom-rule generation discipline (M5)
@@ -108,12 +108,12 @@ These constraints are enforced in CI by the structural-contract test fixture (`c
 ### Compliance
 
 - PCI compliance citations target **PCI DSS 6.2.3 (v4.0.1)**, never 6.3.2. v4.0.1 renumbered code-review from 6.3.2 to 6.2.3; v4.0.1's 6.3.2 is now the SBOM-inventory mandate (different scope, out of v1).
-- `cwes_actually_covered` in the manifest is computed from rules that **fired at least once** in the last successful scan, not from rules that were *selected*. The distinction is enforced in `dast-spike check`.
+- `cwes_actually_covered` in the manifest is computed from rules that **fired at least once** in the last successful scan, not from rules that were *selected*.
 - Coverage gaps surface explicitly in `manifest.coverage_gaps[]` with reasons. Never silently.
 
 ### PII / data handling
 
-- `dast-spike` does not log target HTTP responses. ZAP's report.json contains snippets of responses by design (evidence in alerts) — that file is uploaded as a workflow artefact and follows the consumer's retention policy. Documented limitation: do not run `dast-spike` against production targets carrying PII; use staging/test targets only.
+- `zaprun` does not log target HTTP responses. ZAP's report.json contains snippets of responses by design (evidence in alerts) — that file is uploaded as a workflow artefact and follows the consumer's retention policy. Documented limitation: do not run `zaprun` against production targets carrying PII; use staging/test targets only.
 - The runner's logs (RUST_LOG=info default) carry only IDs, SHAs, rule names, and counts. No request bodies, no response bodies.
 
 ## Image tagging convention
@@ -130,7 +130,7 @@ The published image at `ghcr.io/kerberosmansour/zaprun` follows a strict tagging
 | `:vX` (e.g. `:v0`) | tag push (excluded for pre-releases) | floating — re-points to the latest minor on that major |
 | **`:latest`** | **NEVER PUBLISHED** | n/a |
 
-**Pin by digest.** Consumers MUST pin to `ghcr.io/kerberosmansour/zaprun@sha256:<digest>` in CI, infrastructure, and image-pin files. The floating tags (`:edge`, `:vX.Y`, `:vX`) exist for ergonomic browsing, NOT for production pinning. The `dast-spike` CLI's `--image` flag refuses non-digest references (`crates/dast-spike/src/types.rs::ImageRef`).
+**Pin by digest.** Consumers MUST pin to `ghcr.io/kerberosmansour/zaprun@sha256:<digest>` in CI, infrastructure, and image-pin files. The floating tags (`:edge`, `:vX.Y`, `:vX`) exist for ergonomic browsing, NOT for production pinning. The `zaprun` CLI's `--image` flag refuses non-digest references (`crates/zaprun/src/image_ref.rs`).
 
 **Why no `:latest`.** The `:latest` convention is the single biggest cause of irreproducible CI image-pull behaviour; we never want a consumer to find a mystery `:latest` tag pointing at unknown content. Floating semver tags are the closest substitute and are bounded by explicit-versioned cadence.
 
