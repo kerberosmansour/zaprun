@@ -15,6 +15,7 @@ categories = ["command-line-utilities", "development-tools::testing"]
 [dependencies]
 chrono.workspace = true
 clap.workspace = true
+dast-spike = { path = "../dast-spike", version = "0.1.0" }
 # Smallest-viable CSPRNG for the per-run 32-byte ZAP API key (CWE-306). std has
 # no cryptographic randomness; getrandom is OS-backed, audited, and already in
 # the transitive graph via the SunLit crates.
@@ -35,6 +36,7 @@ which.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true
+regex.workspace = true
 sha2 = "0.10"
 tempfile.workspace = true
 

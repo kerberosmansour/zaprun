@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kerberosmansour/Dast.Spike/blob/main/schema/baseline-v1.json",
+  "$id": "https://github.com/kerberosmansour/zaprun/blob/main/schema/baseline-v1.json",
   "type": "object",
   "required": ["$schema", "schema_version", "suppressions"],
   "additionalProperties": false,
@@ -18,4 +18,3 @@
     }
   }
 }
-

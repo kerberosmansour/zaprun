@@ -83,7 +83,7 @@ These constraints are enforced in CI by the structural-contract test fixture (`c
 
 ### Filesystem discipline
 
-- Symlink-traversal defence on every write into `.dast-spike/` and `.github/workflows/`. Every path component verified to be a directory, not a symlink, before any write. Refuse with clear stderr if any component is a symlink.
+- Symlink-traversal defence on every write into `.zaprun/` and `.github/workflows/`. Every path component verified to be a directory, not a symlink, before any write. Refuse with clear stderr if any component is a symlink.
 - File creation uses `O_NOFOLLOW`-equivalent semantics where the OS supports it.
 - Cache directory location: `~/.cache/dast-spike/zap-image/<DIGEST>/` per XDG. Per-digest isolation — bumping the pin writes a sibling directory; older digests are never overwritten in place.
 

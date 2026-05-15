@@ -2,6 +2,7 @@ pub mod baseline_schema;
 pub mod cwe_to_rules;
 pub mod manifest;
 pub mod path_safety;
+pub mod sarif;
 pub mod workflow_template;
 
 pub use baseline_schema::{

@@ -50,6 +50,12 @@ Examples:
   # Active scan an OpenAPI spec
   zaprun api ./openapi.yaml --target http://localhost:3001 --active
 
+  # Bootstrap target-owned DAST config and workflow
+  zaprun init --target-dir /path/to/webapp --deployment-target https://staging.example.test
+
+  # Re-derive target-owned config when the threat model or image pin changes
+  zaprun rederive --target-dir /path/to/webapp
+
   # Pre-flight: confirm docker, image digest, and target reachability
   zaprun doctor --probe-target http://localhost:3001
 
@@ -86,6 +92,14 @@ pub enum Commands {
     Observe(ObserveArgs),
     /// Class-based calibration against expected plugin IDs (M5).
     Calibrate(CalibrateArgs),
+    /// Bootstrap target-owned DAST config and workflow.
+    Init(InitArgs),
+    /// Re-derive target-owned DAST config when inputs drift.
+    #[command(name = "rederive")]
+    ReDerive(ReDeriveArgs),
+    /// Triage SAST SARIF into a guided DAST map.
+    #[command(name = "triage-sarif")]
+    TriageSarif(TriageSarifArgs),
     /// Explain a previous run directory (MVP2).
     Explain(ExplainArgs),
 }
@@ -307,6 +321,72 @@ pub struct CalibrateArgs {
     pub output: PathBuf,
 }
 
+const INIT_LONG_ABOUT: &str = "\
+Bootstrap target-owned DAST configuration for a web app or web service.
+
+This command inspects the target repository, chooses zaprun-backed DAST policy,
+writes .zaprun/ config plus .github/workflows/dast.yml, and pins the generated
+workflow to the latest approved digest-pinned zaprun image.";
+
+const INIT_AFTER_HELP: &str = "\
+Examples:
+  zaprun init --target-dir /path/to/webapp \\
+    --deployment-target https://staging.example.test
+
+  zaprun init --target-dir /path/to/api \\
+    --deployment-target http://host.docker.internal:3001";
+
+#[derive(Debug, Args)]
+#[command(long_about = INIT_LONG_ABOUT, after_help = INIT_AFTER_HELP)]
+pub struct InitArgs {
+    /// Target repository to receive .zaprun/ config and .github/workflows/dast.yml.
+    #[arg(long, default_value = ".")]
+    pub target_dir: PathBuf,
+    /// Runtime base URL the workflow should scan.
+    #[arg(long)]
+    pub deployment_target: Option<String>,
+    /// Optional image reference (`<repo>@sha256:<64-hex>`); defaults to the pinned digest.
+    #[arg(long)]
+    pub image: Option<String>,
+}
+
+const REDERIVE_LONG_ABOUT: &str = "\
+Re-derive target-owned DAST configuration when threat-model CWEs or the approved
+zaprun image digest drift from .zaprun/manifest.json.";
+
+const REDERIVE_AFTER_HELP: &str = "\
+Examples:
+  zaprun rederive --target-dir /path/to/webapp";
+
+#[derive(Debug, Args)]
+#[command(long_about = REDERIVE_LONG_ABOUT, after_help = REDERIVE_AFTER_HELP)]
+pub struct ReDeriveArgs {
+    /// Target repository containing .zaprun/manifest.json.
+    #[arg(long, default_value = ".")]
+    pub target_dir: PathBuf,
+}
+
+const TRIAGE_SARIF_LONG_ABOUT: &str = "\
+Triage SAST SARIF into endpoint x CWE guided DAST inputs.
+
+Reads SARIF 2.1.0 plus target route/OpenAPI context, then writes a conservative
+triage report, endpoint x CWE guided scan map, and filtered SARIF containing
+only findings already validated by ZAP.";
+
+#[derive(Debug, Args)]
+#[command(long_about = TRIAGE_SARIF_LONG_ABOUT)]
+pub struct TriageSarifArgs {
+    /// Target repository containing route/OpenAPI context.
+    #[arg(long, default_value = ".")]
+    pub target_dir: PathBuf,
+    /// SARIF file to classify.
+    #[arg(long)]
+    pub sarif: PathBuf,
+    /// Output directory for triage-report.json/guided-scan-map.json/filtered.sarif.
+    #[arg(long, default_value = "./output/zaprun-triage-sarif")]
+    pub output: PathBuf,
+}
+
 const EXPLAIN_LONG_ABOUT: &str = "\
 Explain a previous run directory in human-readable terms (MVP2 stub).
 
@@ -358,6 +438,9 @@ pub fn run() -> StdExit {
             profile: a.profile,
             output: a.output,
         }),
+        Commands::Init(a) => cmd_init(a),
+        Commands::ReDerive(a) => cmd_rederive(a),
+        Commands::TriageSarif(a) => cmd_triage_sarif(a),
         // Explain stays a stub; MVP2.
         Commands::Explain(_) => Err(ZapshootError::SubcommandNotYetImplemented),
     };
@@ -370,6 +453,34 @@ pub fn run() -> StdExit {
         }
     };
     StdExit::from(code as u8)
+}
+
+fn cmd_init(a: InitArgs) -> Result<ExitCode, ZapshootError> {
+    dast_spike::init::run(dast_spike::cli::InitArgs {
+        target_dir: a.target_dir,
+        deployment_target: a.deployment_target,
+        image: a.image,
+    })
+    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    Ok(ExitCode::Pass)
+}
+
+fn cmd_rederive(a: ReDeriveArgs) -> Result<ExitCode, ZapshootError> {
+    dast_spike::rederive::run(dast_spike::cli::ReDeriveArgs {
+        target_dir: a.target_dir,
+    })
+    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    Ok(ExitCode::Pass)
+}
+
+fn cmd_triage_sarif(a: TriageSarifArgs) -> Result<ExitCode, ZapshootError> {
+    dast_spike::triage_sarif::run(dast_spike::triage_sarif::TriageSarifOptions {
+        target_dir: a.target_dir,
+        sarif: a.sarif,
+        output: a.output,
+    })
+    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    Ok(ExitCode::Pass)
 }
 
 fn cmd_plan(a: PlanArgs) -> Result<ExitCode, ZapshootError> {
@@ -402,10 +513,7 @@ fn cmd_plan(a: PlanArgs) -> Result<ExitCode, ZapshootError> {
         .to_yaml()
         .map_err(|e| ZapshootError::Io(e.to_string()))?;
     std::fs::write(canonical.join("plan.yaml"), yaml)?;
-    let placeholder_image = format!(
-        "ghcr.io/kerberosmansour/zaprun@sha256:{}",
-        "0".repeat(64)
-    );
+    let placeholder_image = format!("ghcr.io/kerberosmansour/zaprun@sha256:{}", "0".repeat(64));
     let meta = RunMeta::new_with_random_api_key(&placeholder_image);
     meta.write_to(&canonical.join("run.json"))?;
     if !a.dry_run {

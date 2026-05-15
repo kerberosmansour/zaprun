@@ -1,4 +1,4 @@
-name: Dast.Spike
+name: zaprun DAST
 
 on:
   pull_request:
@@ -24,13 +24,13 @@ jobs:
           persist-credentials: false
       - name: Run DAST
         run: |
+          mkdir -p output
           docker run --rm --user 1000:1000 \
             --add-host=host.docker.internal:host-gateway \
+            -v "$PWD:/work:ro" \
             -v "$PWD/output:/zap/wrk/output:rw" \
-            ghcr.io/kerberosmansour/zaprun@sha256:0643f08f6b2f64fb5dd76f9713e1411cb76f7c37e049bff89e3e9954056c1c4f \
-            --target http://host.docker.internal:3001 \
-            --output-dir /zap/wrk/output \
-            --policy /zap/policies/policy-pr.yml
+            ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649 \
+            zaprun scan http://host.docker.internal:3001 --active --profile web-pr --output /zap/wrk/output
       - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -38,4 +38,3 @@ jobs:
           name: zaprun-report
           path: output/
           retention-days: 30
-

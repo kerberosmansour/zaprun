@@ -9,68 +9,68 @@
 ```
 zaprun (this repo)
 ─────────────────────────
-crates/zaprun           (the CLI — drives ZAP via Automation Framework plans)
-crates/dast-spike       (orchestrator — wraps zaprun + nuclei + wapiti, manifest emission, baseline lifecycle)
-crates/dast-spike-rules (curated CWE → scanner-rule mapping, typed schemas)
+crates/zaprun           (the public CLI — scan/api/observe plus init/rederive/triage-sarif orchestration)
+crates/dast-spike       (internal orchestration support behind zaprun)
+crates/dast-spike-rules (SARIF parser, curated CWE → scanner-rule mapping, typed schemas)
+xtasks/dast-verify      (generic-rule and target-owned-rule promotion gate)
 docker/zap              (Dockerfile + entrypoint + default policies)
 templates/              (workflow YAML template)
 tests/targets           (vulnerable-app registry — public OSS targets)
 .github/workflows/      (own CI: build-zap-image.yml, ci.yml)
 
-Consumer repo `.dast-spike/` directory (emitted by `dast-spike init`)
+Consumer repo `.zaprun/` directory (emitted by `zaprun init`)
 ──────────────────────────────────────────────────────────────────
-.dast-spike/
+.zaprun/
   ├── policy-pr.yml          (Tier 1 + 2 active rules; no Selenium)
   ├── policy-nightly.yml     (Tier 1 + 2 + 3; Selenium + Firefox-headless)
   ├── rules.tsv              (FAIL/WARN/IGNORE per ZAP rule)
   ├── baseline.json          (suppressions with `expires_at` half-life)
   ├── scripts/<cwe>-<…>.js   (custom getMetadata() rules)
   ├── manifest.json          (coverage ledger)
-  └── zap-image-pin          (digest of the zaprun image)
+  └── manifest.json          (records the latest approved zaprun image digest)
 .github/workflows/dast.yml   (PR + nightly; SHA-pinned, `--user 1000:1000`)
 ```
 
-## Data flow (PR-blocking lane)
+## Data flow (generated PR-blocking lane)
 
 ```
-   developer commits
+   maintainer runs `zaprun init`
+        │
+        ├─ inspect target repo: OpenAPI, threat model, stack manifests
+        ├─ emit .zaprun/policy-*.yml + rules.tsv + baseline.json
+        ├─ emit .zaprun/manifest.json with threat-model SHA + image digest
+        └─ emit .github/workflows/dast.yml
+        │
+        ▼
+   developer opens PR
         │
         ▼
    GitHub Actions runner (ubuntu-latest)
         │
-        │  start target (vendored binary or docker image, pinned)
-        │  target listens on 127.0.0.1:<port>
+        │  docker run --user 1000:1000
+        │    --add-host=host.docker.internal:host-gateway
+        │    -v "$PWD:/work:ro"
+        │    -v "$PWD/output:/zap/wrk/output:rw"
+        │    ghcr.io/kerberosmansour/zaprun@sha256:<latest-approved-digest>
+        │    zaprun scan <url> --active --profile web-pr --output /zap/wrk/output
         │
-        │  dast-spike scan --target <url> --image <repo>@<digest>
-        │    │
-        │    ├─ load .dast-spike/policy-pr.yml + rules.tsv + baseline.json
-        │    ├─ build replacer config (auth header) → /tmp/replacer.conf
-        │    ├─ rewrite OpenAPI host: 127.0.0.1 → host.docker.internal
-        │    ├─ docker run --user 1000:1000
-        │    │     --add-host=host.docker.internal:host-gateway
-        │    │     -v output:rw -v scripts:ro -v openapi:ro -v policy:ro
-        │    │     ghcr.io/kerberosmansour/zaprun@sha256:<digest>
-        │    │     dast-spike-entrypoint
-        │    │
-        │    └─ wait, capture output/zap-report.json + run-summary.json
+        │  OR, for OpenAPI targets:
         │
-        ▼
-   dast-spike check
-        │  parse report, apply baseline (with expires_at gate),
-        │  emit SARIF + GitHub Step Summary, exit 0/1
+        │    zaprun api /work/openapi.yaml --target <url> --active --output /zap/wrk/output
+        │
         ▼
    actions/upload-artifact (own pinned step) → zap-report
         │
         ▼
-   PR status: pass/fail
+   PR status: pass/fail from zaprun's stable exit codes
 ```
 
 ## Trust boundaries
 
 | Boundary | Direction | Mediation |
 |---|---|---|
-| `dast-spike` CLI → target repo filesystem | read / write | Symlink-traversal defence; writes only to `.dast-spike/` and `.github/workflows/` of the target. |
-| `dast-spike` CLI → Docker daemon (local) | RPC | Image is digest-pinned; argv-list invocation (no shell interpolation). |
+| `zaprun init/rederive` → target repo filesystem | read / write | Symlink-traversal defence; writes only to `.zaprun/` and `.github/workflows/` of the target. |
+| `zaprun scan/api` → Docker daemon (local) | RPC | Image is digest-pinned; argv-list invocation (no shell interpolation). |
 | Our Docker image → Wolfi base + official ZAP release assets | pull at build time | Base image digest-pinned; release tarball + helper scripts SHA-256-checked in the Dockerfile. |
 | Consumer workflow → our published image | pull | `@sha256:<digest>` enforced by the CLI's `--image` parsing; SLSA Build Provenance attestation available. |
 | ZAP container → target service under test | network (Docker bridge) | Local-only; target binds 127.0.0.1; ZAP container reaches it via `host.docker.internal`. |
@@ -81,7 +81,7 @@ Consumer repo `.dast-spike/` directory (emitted by `dast-spike init`)
 
 ### `crates/zaprun` (Rust CLI)
 
-The deterministic ZAP driver. Subcommands: `doctor`, `plan`, `scan <url> --active`, `api <spec> --target … --active`, `observe`, `calibrate`, `explain`. Every successful run writes the same artifact set under `--output`:
+The deterministic ZAP driver and public DAST orchestration surface. Subcommands: `doctor`, `plan`, `scan <url> --active`, `api <spec> --target … --active`, `observe`, `calibrate`, `init`, `rederive`, `triage-sarif`, and `explain`. Every successful scan run writes the same artifact set under `--output`:
 
 | File | Schema | Contents |
 |---|---|---|
@@ -102,13 +102,19 @@ Per-run 32-byte cryptographically-random ZAP API key, wrapped in `secure_data::S
 
 TLS via `rustls-tls` only — no `native-tls` features pulled.
 
-### `crates/dast-spike` (Rust binary)
+`init` emits target-owned `.zaprun/` config and a workflow that calls the baked `zaprun` CLI from the latest approved digest-pinned image. `rederive` compares threat-model SHA, claimed CWEs, and image digest against the manifest; when drift exists it rewrites the config and opens at most one review PR via `gh pr create`. `triage-sarif` maps SARIF 2.1.0 findings to conservative DAST classifications and an endpoint x CWE guided scan map. `observe` replays concrete raw HTTP requests with bounded network behavior and records response evidence in `observations.json`.
 
-The orchestrator. Owns scan invocation, baseline lifecycle, manifest emission, finding triage, regression-rule generation, image-bump, and the structural-contract test harness for the workflow template.
+### `crates/dast-spike` (internal Rust support crate)
+
+Internal implementation support for target-repo bootstrapping, drift detection, baseline lifecycle, manifest emission, finding triage, image-bump logic, and scanner integrations. New user-facing orchestration features are exposed through `zaprun`, not through a separate `dast-spike` CLI.
 
 ### `crates/dast-spike-rules` (library)
 
-Schemas + parsers for every artefact: `cwe-to-rules.toml`, manifest, baseline, finding doc. No I/O; pure data.
+Schemas + parsers for reusable artefacts: SARIF-derived findings, `cwe-to-rules.toml`, manifest, and baseline. No target-specific rules live here.
+
+### `xtasks/dast-verify`
+
+Standalone rule-promotion gate. Candidate JavaScript DAST rules must declare metadata, avoid unsafe tokens such as `Java.type` / `Polyglot.eval`, fire on vulnerable synthetic fixtures, stay silent on patched fixtures, and avoid app-specific literals before they can be treated as generic. App-specific candidates can pass only as target-owned output, written outside this repository, for example under the target repo's `.zaprun/scripts/`.
 
 ### `docker/zap/` (Dockerfile + entrypoint + default policies)
 
@@ -116,7 +122,7 @@ Builds `ghcr.io/kerberosmansour/zaprun`. Wolfi base (digest-pinned), OpenJDK plu
 
 ### `templates/dast-workflow.yml`
 
-Static workflow skeleton. Substituted only by action SHAs (40-char hex) and image digest (`^sha256:[0-9a-f]{64}$`). User-provided strings (slugs, threat-model content, finding-doc prose) NEVER flow in.
+Static workflow skeleton and structural contract for generated DAST workflows. The generated workflow keeps action SHAs pinned, top-level `permissions: {}`, `pull_request` instead of `pull_request_target`, UID `1000:1000`, and the latest approved `ghcr.io/kerberosmansour/zaprun@sha256:<digest>` image. Threat-model prose and finding text never flow into workflow YAML; only validated scan coordinates such as an HTTP(S) deployment target and an OpenAPI filename are emitted by `zaprun init`.
 
 ### `tests/targets/`
 

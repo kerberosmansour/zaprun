@@ -273,7 +273,7 @@ The inlined policy's SHA-256 is pinned as `API_MINIMAL_POLICY_INLINE_HASH` in `c
 
 ### `observe`
 
-Send a candidate request and observe ZAP alerts (M5). Useful for incident-response replay flows: take a request that reproduces a finding (from a bug-bounty report, an SAST-flagged path, a prior scan's evidence), replay it through ZAP's proxy, and capture the alerts ZAP raises.
+Send a candidate raw HTTP request and record replay evidence. Useful for incident-response and SAST-guided DAST flows: take a request that reaches a finding, replay it against a staging target, and capture whether the target responded before deciding how to tune scanner coverage.
 
 ```text
 Usage: zaprun observe [OPTIONS] --target <TARGET>
@@ -303,7 +303,7 @@ zaprun observe \
   --target https://example.test
 ```
 
-Writes: `observations.json`.
+Writes: `observations.json` with request/response evidence such as `request_sent`, `response_observed`, `request_path`, `http_status`, and `response_body_hash`. ZAP alert correlation can be layered on top of this evidence path; the replay artifact is already useful for proving that a SARIF finding has an HTTP-reachable request.
 
 **SSRF guard** — `observe`'s `--target` is the only `zaprun` flag with a network-trust-boundary check. Link-local addresses (169.254.0.0/16, the IMDS range) are unconditionally refused. RFC1918 (10/8, 172.16/12, 192.168/16) and loopback (127/8) require the explicit `--allow-internal-target` opt-in. The rationale is in `crates/zaprun/tests/unit_observe_ssrf_guard.rs`. The `scan` subcommand uses scheme-only validation because loopback is the headline scan target in CI.
 
@@ -332,7 +332,7 @@ zaprun calibrate ./calibration/nodegoat.toml \
 
 Writes: calibration-results JSON in the output directory.
 
-In v0.1.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked in [Dast.Spike#5](https://github.com/kerberosmansour/Dast.Spike/issues/5) (private). The flag surface is stable.
+In v0.1.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
 
 ### `explain`
 
@@ -445,7 +445,30 @@ docker run --rm \
     --target https://staging.example.test
 ```
 
-`output/observations.json` carries the response + every alert ZAP raised when the request was replayed.
+`output/observations.json` carries replay evidence for the request and response. Use that evidence with `zaprun triage-sarif` and the DAST rule gate before promoting any scanner-rule change.
+
+### Example 3b: triage SARIF and gate a target-owned rule
+
+```bash
+zaprun triage-sarif \
+  --target-dir /path/to/webapp \
+  --sarif ./sast.sarif \
+  --output output/zaprun-triage
+
+cargo run --manifest-path xtasks/dast-verify/Cargo.toml -- gate \
+  --candidate ./candidate-rule.js \
+  --fixtures tests/synthetic-mocks \
+  --output output/dast-verify.json
+
+cargo run --manifest-path xtasks/dast-verify/Cargo.toml -- gate \
+  --candidate ./target-owned-rule.js \
+  --fixtures tests/synthetic-mocks \
+  --output output/target-rule.json \
+  --target-owned \
+  --target-output /path/to/webapp/.zaprun/scripts
+```
+
+Generic rule candidates must pass the gate before they belong in this repository. App-specific rules stay target-owned.
 
 ### Example 4: gate a PR on high-severity findings
 

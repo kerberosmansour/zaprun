@@ -8,7 +8,8 @@ pub struct Manifest {
     pub schema: String,
     pub schema_version: String,
     pub generated_at: String,
-    pub generated_by_dast_spike_version: String,
+    #[serde(alias = "generated_by_dast_spike_version")]
+    pub generated_by_zaprun_version: String,
     pub image_digest: String,
     pub upstream_image_digest: String,
     #[serde(default)]
@@ -73,12 +74,11 @@ pub struct BaselineManifestSummary {
 impl Manifest {
     pub fn m1(image_digest: String, upstream_image_digest: String, generated_at: String) -> Self {
         Self {
-            schema:
-                "https://github.com/kerberosmansour/zaprun/blob/main/schema/manifest-v1.json"
-                    .to_string(),
+            schema: "https://github.com/kerberosmansour/zaprun/blob/main/schema/manifest-v1.json"
+                .to_string(),
             schema_version: "1.0".to_string(),
             generated_at,
-            generated_by_dast_spike_version: env!("CARGO_PKG_VERSION").to_string(),
+            generated_by_zaprun_version: env!("CARGO_PKG_VERSION").to_string(),
             image_digest,
             upstream_image_digest,
             threat_model_sha: None,
