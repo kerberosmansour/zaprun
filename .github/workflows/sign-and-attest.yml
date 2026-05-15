@@ -30,6 +30,7 @@ jobs:
       contents: read
       id-token: write
       attestations: write
+      artifact-metadata: write
       # `push-to-registry: true` below stores the attestation manifest in
       # GHCR alongside the image. This job runs on a fresh runner (separate
       # from build) so it needs its own GHCR credentials — hence the Login
@@ -43,7 +44,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
           subject-name: ${{ inputs.subject-name }}
           subject-digest: ${{ inputs.subject-digest }}
@@ -54,14 +55,14 @@ jobs:
           name: sboms
           path: .
       - name: Attest SPDX-JSON SBOM
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
           subject-name: ${{ inputs.subject-name }}
           subject-digest: ${{ inputs.subject-digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
       - name: Attest CycloneDX-JSON SBOM
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
           subject-name: ${{ inputs.subject-name }}
           subject-digest: ${{ inputs.subject-digest }}
