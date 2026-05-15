@@ -253,6 +253,7 @@ jobs:
             Source: ghcr.io/kerberosmansour/zaprun:${{ github.ref_name }}
             Digest: ${{ steps.digest.outputs.digest }}
           branch: chore/bump-zaprun-pin-${{ github.ref_name }}
+          base: main
           delete-branch: true
           labels: |
             deps

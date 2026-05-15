@@ -11,5 +11,5 @@
 # crates do not drift.
 
 repo = "zaprun"
-sha256 = "1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649"
-note = "v0.1.0 release digest — first publicly signed and attested image at ghcr.io/kerberosmansour/zaprun. Future releases auto-bump this field via release.yml's bump-pins job."
+sha256 = "97dbb1439ff6ae1dc0a050434feb0257d68b8b81e641a9348bf5f938a4457e9a"
+note = "Bumped by release v0.3.0 after .github/workflows/release.yml retagged the signed digest."
