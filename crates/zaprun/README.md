@@ -25,6 +25,16 @@ cargo build --release -p zaprun
 
 At runtime `zaprun` drives Docker, so a working Docker daemon is required on the host regardless of how the CLI was installed.
 
+## Publishing
+
+This crate is the only publishable Cargo package in the workspace. Publish it explicitly:
+
+```bash
+cargo publish -p zaprun
+```
+
+Do not publish the whole workspace; the legacy `dast-spike` crates are internal compatibility code and are marked non-publishable.
+
 ## Platform support
 
 | Platform | CLI binary | Container image | Notes |
