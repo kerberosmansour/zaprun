@@ -101,7 +101,8 @@ fn image_workflow_smokes_ptk_and_client_addons() {
         "ptk-alpha-*.zap",
         "grep -E '(^|[[:space:]])client[[:space:]]'",
         "grep -E '(^|[[:space:]])ptk[[:space:]]'",
-        "! grep -E '(^|[[:space:]])quickstart[[:space:]]'",
+        "if grep -E '(^|[[:space:]])quickstart[[:space:]]'",
+        "unexpected quickstart add-on in headless image",
         "ptk.automatedScanning.enabled: true",
         "-cmd -autorun /zap/wrk/plan.yaml",
     ] {
