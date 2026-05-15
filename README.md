@@ -142,7 +142,13 @@ SARIF is evidence, not authority: a result becomes `dast-detectable` only when t
 
 ## Status
 
-`v0.2.0` is the release-candidate crate for the self-contained `zaprun` CLI. The previous `v0.1.0` image and crate are signed + attested and public; `v0.2.0` will publish the migrated CLI after this PR merges and the release tag is cut.
+`v0.2.0` is the self-contained `zaprun` CLI release. The legacy workspace crates `dast-spike` and `dast-spike-rules` are not publishable crates; release the public CLI with:
+
+```bash
+cargo publish -p zaprun
+```
+
+Do not use `cargo publish --workspace` for this repo. The previous `v0.1.0` image and crate are signed + attested and public; `v0.2.0` publishes the migrated CLI.
 
 The repo follows `v<major>.<minor>.<patch>` tagging via [release.yml](.github/workflows/release.yml). There is no `:latest` image tag — consumers are expected to pin by digest.
 
