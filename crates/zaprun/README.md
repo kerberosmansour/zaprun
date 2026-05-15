@@ -2,7 +2,7 @@
 
 `zaprun` is a point-and-shoot ZAP driver: it builds an OWASP ZAP Automation Framework plan, runs ZAP via a digest-pinned container, and writes a stable set of artifacts so CI gates and humans can reason about results the same way.
 
-This manual is the canonical reference for v0.2.0. It is generated against the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.2.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun) — every flag, default value, and example below is what `zaprun --help` and `zaprun <subcommand> --help` actually print.
+This manual is the canonical reference for v0.2.0. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.2.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
 
 ## Install
 
@@ -49,6 +49,9 @@ The Rust code is pure portable Rust (`rustls-tls`, no `native-tls`; `getrandom` 
   - [`scan`](#scan)
   - [`api`](#api)
   - [`observe`](#observe)
+  - [`init`](#init)
+  - [`rederive`](#rederive)
+  - [`triage-sarif`](#triage-sarif)
   - [`calibrate`](#calibrate)
   - [`explain`](#explain)
 - [Image entrypoint dispatch](#image-entrypoint-dispatch)
@@ -64,6 +67,8 @@ Two distribution surfaces:
 2. **Built from source** by cloning the repo and running `cargo build --release -p zaprun`. The resulting binary lives at `target/release/zaprun`. Useful for development; for scans it's still better to use the image because the image bundles the matching ZAP runtime + add-ons + helper scripts.
 
 The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.2.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+
+`zaprun` does not depend on `dast-spike`; the `init`, `rederive`, `triage-sarif`, schema, SARIF, and path-safety code used by the public CLI lives inside this crate.
 
 ## Invocation patterns
 
@@ -180,7 +185,7 @@ zaprun plan http://localhost:3001 --dry-run --output output/zaprun-plan
 
 Writes: `plan.yaml`, `run.json`.
 
-Note: in v0.2.0 (MVP1), `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
+Note: in v0.2.0, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
 
 ### `scan`
 
@@ -307,6 +312,52 @@ Writes: `observations.json` with request/response evidence such as `request_sent
 
 **SSRF guard** — `observe`'s `--target` is the only `zaprun` flag with a network-trust-boundary check. Link-local addresses (169.254.0.0/16, the IMDS range) are unconditionally refused. RFC1918 (10/8, 172.16/12, 192.168/16) and loopback (127/8) require the explicit `--allow-internal-target` opt-in. The rationale is in `crates/zaprun/tests/unit_observe_ssrf_guard.rs`. The `scan` subcommand uses scheme-only validation because loopback is the headline scan target in CI.
 
+### `init`
+
+Bootstrap target-owned DAST configuration and a GitHub Actions workflow.
+
+```text
+Usage: zaprun init [OPTIONS]
+
+Options:
+      --target-dir <TARGET_DIR>              Target repository to receive .zaprun/ config and .github/workflows/dast.yml [default: .]
+      --deployment-target <DEPLOYMENT_TARGET> Runtime base URL the workflow should scan
+      --image <IMAGE>                        Optional image reference (`<repo>@sha256:<64-hex>`); defaults to the pinned digest
+  -h, --help                                 Print help
+```
+
+Writes `.zaprun/policy-pr.yml`, `.zaprun/policy-nightly.yml`, `.zaprun/baseline.json`, `.zaprun/rules.tsv`, `.zaprun/manifest.json`, and `.github/workflows/dast.yml`.
+
+### `rederive`
+
+Recompute target-owned DAST configuration when the threat model or approved image digest drifts from `.zaprun/manifest.json`.
+
+```text
+Usage: zaprun rederive [OPTIONS]
+
+Options:
+      --target-dir <TARGET_DIR>  Target repository containing .zaprun/manifest.json [default: .]
+  -h, --help                     Print help
+```
+
+When drift exists, `rederive` rewrites the generated files and opens one review PR with `gh pr create` from the target repository.
+
+### `triage-sarif`
+
+Classify SAST SARIF into endpoint x CWE guided DAST inputs.
+
+```text
+Usage: zaprun triage-sarif [OPTIONS] --sarif <SARIF>
+
+Options:
+      --target-dir <TARGET_DIR>  Target repository containing route/OpenAPI context [default: .]
+      --sarif <SARIF>            SARIF file to classify
+      --output <OUTPUT>          Output directory for triage-report.json/guided-scan-map.json/filtered.sarif [default: ./output/zaprun-triage-sarif]
+  -h, --help                     Print help
+```
+
+Writes `triage-report.json`, `guided-scan-map.json`, and `filtered.sarif`. SARIF remains evidence, not authority: authenticated findings stay `needs-human-input` until logged-in reachability is configured.
+
 ### `calibrate`
 
 Class-based calibration against expected plugin IDs (M5). Reads a calibration profile TOML that declares which ZAP plugin IDs are expected to fire on a target, and reports observed-vs-expected. Useful for regression-testing scanner coverage when you ship a new version of a vulnerable-app fixture.
@@ -336,7 +387,7 @@ In v0.2.0 the calibration evaluator reads the profile and produces a placeholder
 
 ### `explain`
 
-Explain a previous run directory (MVP2 — placeholder in v0.2.0).
+Explain a previous run directory (placeholder in v0.2.0).
 
 ```text
 Usage: zaprun explain <RUN_DIR>
