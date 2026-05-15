@@ -1,15 +1,15 @@
-use crate::{DastSpikeError, Result};
-use dast_spike_rules::cwe_to_rules::CweRuleMappingDocument;
-use dast_spike_rules::manifest::{FindingsSummary, Manifest};
-use dast_spike_rules::safe_write;
-use dast_spike_rules::sarif::{parse_sarif, SarifDocument, SarifFinding};
+use crate::tuner::cwe_to_rules::CweRuleMappingDocument;
+use crate::tuner::manifest::{FindingsSummary, Manifest};
+use crate::tuner::safe_write;
+use crate::tuner::sarif::{parse_sarif, SarifDocument, SarifFinding};
+use crate::tuner::{Result, TunerError};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::Value as YamlValue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-const CWE_TO_RULES: &str = include_str!("../../../references/dast-tuner/cwe-to-rules.toml");
+const CWE_TO_RULES: &str = include_str!("../assets/dast-tuner/cwe-to-rules.toml");
 
 #[derive(Debug, Serialize)]
 pub struct TriageReport {
@@ -86,15 +86,15 @@ pub fn run(args: TriageSarifOptions) -> Result<()> {
     let target_root = args
         .target_dir
         .canonicalize()
-        .map_err(|err| DastSpikeError::Usage(format!("target-dir not found: {err}")))?;
+        .map_err(|err| TunerError::Usage(format!("target-dir not found: {err}")))?;
     if !target_root.is_dir() {
-        return Err(DastSpikeError::Usage(format!(
+        return Err(TunerError::Usage(format!(
             "target-dir is not a directory: {}",
             target_root.display()
         )));
     }
     if !args.sarif.is_file() {
-        return Err(DastSpikeError::MissingFile(args.sarif));
+        return Err(TunerError::MissingFile(args.sarif));
     }
 
     std::fs::create_dir_all(&args.output)?;

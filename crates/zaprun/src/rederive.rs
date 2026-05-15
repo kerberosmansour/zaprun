@@ -1,7 +1,7 @@
 use crate::cli::{InitArgs, ReDeriveArgs};
 use crate::init::{current_snapshot, run_inner, ReDeriveSnapshot};
-use crate::{DastSpikeError, Result};
-use dast_spike_rules::Manifest;
+use crate::tuner::Manifest;
+use crate::tuner::{Result, TunerError};
 use std::path::Path;
 use std::process::Command;
 
@@ -9,7 +9,7 @@ pub fn run(args: ReDeriveArgs) -> Result<()> {
     let target_root = args
         .target_dir
         .canonicalize()
-        .map_err(|err| DastSpikeError::Usage(format!("target-dir not found: {err}")))?;
+        .map_err(|err| TunerError::Usage(format!("target-dir not found: {err}")))?;
     let manifest_path = target_root.join(".zaprun/manifest.json");
     let manifest: Manifest = serde_json::from_str(&std::fs::read_to_string(&manifest_path)?)?;
     let snapshot = current_snapshot(&target_root)?;
@@ -62,11 +62,11 @@ fn open_rederive_pr(target_root: &Path, drift: &[String]) -> Result<()> {
         .arg("--body")
         .arg(body)
         .status()
-        .map_err(|err| DastSpikeError::Usage(format!("failed to run gh: {err}")))?;
+        .map_err(|err| TunerError::Usage(format!("failed to run gh: {err}")))?;
     if status.success() {
         Ok(())
     } else {
-        Err(DastSpikeError::Usage(format!(
+        Err(TunerError::Usage(format!(
             "gh pr create failed with status {status}"
         )))
     }

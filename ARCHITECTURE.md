@@ -9,9 +9,9 @@
 ```
 zaprun (this repo)
 ─────────────────────────
-crates/zaprun           (the public CLI — scan/api/observe plus init/rederive/triage-sarif orchestration)
-crates/dast-spike       (internal orchestration support behind zaprun)
-crates/dast-spike-rules (SARIF parser, curated CWE → scanner-rule mapping, typed schemas)
+crates/zaprun           (the public self-contained CLI — scan/api/observe plus init/rederive/triage-sarif)
+crates/zaprun/src/tuner (SARIF parser, curated CWE → scanner-rule mapping, typed schemas, safe writes)
+crates/dast-spike       (legacy scanner-runner experiments; not a zaprun dependency)
 xtasks/dast-verify      (generic-rule and target-owned-rule promotion gate)
 docker/zap              (Dockerfile + entrypoint + default policies)
 templates/              (workflow YAML template)
@@ -104,13 +104,11 @@ TLS via `rustls-tls` only — no `native-tls` features pulled.
 
 `init` emits target-owned `.zaprun/` config and a workflow that calls the baked `zaprun` CLI from the latest approved digest-pinned image. `rederive` compares threat-model SHA, claimed CWEs, and image digest against the manifest; when drift exists it rewrites the config and opens at most one review PR via `gh pr create`. `triage-sarif` maps SARIF 2.1.0 findings to conservative DAST classifications and an endpoint x CWE guided scan map. `observe` replays concrete raw HTTP requests with bounded network behavior and records response evidence in `observations.json`.
 
-### `crates/dast-spike` (internal Rust support crate)
+All code needed by the public `zaprun` CLI lives inside `crates/zaprun`, including the `src/tuner/` schema and SARIF helpers. The published crate does not depend on `dast-spike` or `dast-spike-rules`.
 
-Internal implementation support for target-repo bootstrapping, drift detection, baseline lifecycle, manifest emission, finding triage, image-bump logic, and scanner integrations. New user-facing orchestration features are exposed through `zaprun`, not through a separate `dast-spike` CLI.
+### `crates/dast-spike` (legacy workspace crate)
 
-### `crates/dast-spike-rules` (library)
-
-Schemas + parsers for reusable artefacts: SARIF-derived findings, `cwe-to-rules.toml`, manifest, and baseline. No target-specific rules live here.
+Legacy scanner-runner experiments and compatibility tests. It remains in the workspace, but it is not in `zaprun`'s dependency graph and must not become the implementation home for new public `zaprun` CLI behavior.
 
 ### `xtasks/dast-verify`
 

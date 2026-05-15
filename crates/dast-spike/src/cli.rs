@@ -87,22 +87,6 @@ pub struct BumpImageArgs {
     pub pin_file: PathBuf,
 }
 
-#[derive(Debug, Args, Clone)]
-pub struct InitArgs {
-    #[arg(long, default_value = ".")]
-    pub target_dir: PathBuf,
-    #[arg(long)]
-    pub deployment_target: Option<String>,
-    #[arg(long)]
-    pub image: Option<String>,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct ReDeriveArgs {
-    #[arg(long, default_value = ".")]
-    pub target_dir: PathBuf,
-}
-
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ScannerName {
     Zap,

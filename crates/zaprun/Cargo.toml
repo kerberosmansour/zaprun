@@ -1,6 +1,6 @@
 [package]
 name = "zaprun"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -15,11 +15,11 @@ categories = ["command-line-utilities", "development-tools::testing"]
 [dependencies]
 chrono.workspace = true
 clap.workspace = true
-dast-spike = { path = "../dast-spike", version = "0.1.0" }
 # Smallest-viable CSPRNG for the per-run 32-byte ZAP API key (CWE-306). std has
 # no cryptographic randomness; getrandom is OS-backed, audited, and already in
 # the transitive graph via the SunLit crates.
 getrandom = "0.2"
+regex.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
 secure_boundary = "0.1"
 secure_data = "0.1"
@@ -36,7 +36,6 @@ which.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true
-regex.workspace = true
 sha2 = "0.10"
 tempfile.workspace = true
 

@@ -1,23 +1,50 @@
 use crate::cli::InitArgs;
-use crate::image_pin::ZapImagePin;
-use crate::types::ImageRef;
-use crate::{DastSpikeError, Result};
+use crate::image_ref::ImageRef;
+use crate::tuner::cwe_to_rules::{RuleLevel, RuleSurface};
+use crate::tuner::manifest::SelectedRule;
+use crate::tuner::{safe_write, BaselineDocument, CweRuleMappingDocument, Manifest};
+use crate::tuner::{Result, TunerError};
 use chrono::Utc;
-use dast_spike_rules::cwe_to_rules::{RuleLevel, RuleSurface};
-use dast_spike_rules::manifest::SelectedRule;
-use dast_spike_rules::{safe_write, BaselineDocument, CweRuleMappingDocument, Manifest};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const POLICY_PR: &str = include_str!("../../../docker/zap/policies/policy-pr.yml");
-const POLICY_NIGHTLY: &str = include_str!("../../../docker/zap/policies/policy-nightly.yml");
-const CWE_TO_RULES: &str = include_str!("../../../references/dast-tuner/cwe-to-rules.toml");
-const ZAP_IMAGE_PIN: &str = include_str!("../../../references/zap-image-pin.toml");
+const POLICY_PR: &str = include_str!("../assets/policies/policy-pr.yml");
+const POLICY_NIGHTLY: &str = include_str!("../assets/policies/policy-nightly.yml");
+const CWE_TO_RULES: &str = include_str!("../assets/dast-tuner/cwe-to-rules.toml");
+const ZAP_IMAGE_PIN: &str = include_str!("../assets/zap-image-pin.toml");
 const DEFAULT_TARGET: &str = "http://host.docker.internal:3001";
 const DEFAULT_IMAGE_REPO: &str = "ghcr.io/kerberosmansour/zaprun";
+
+#[derive(Debug, Clone, Deserialize)]
+struct ZapImagePin {
+    upstream: ImagePinSection,
+    ours: ImagePinSection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ImagePinSection {
+    digest: String,
+}
+
+impl ZapImagePin {
+    fn validate(&self) -> Result<()> {
+        validate_digest(&self.upstream.digest)?;
+        validate_digest(&self.ours.digest)
+    }
+
+    fn our_digest(&self) -> Result<&str> {
+        validate_digest(&self.ours.digest)?;
+        Ok(&self.ours.digest)
+    }
+
+    fn upstream_digest(&self) -> Result<&str> {
+        validate_digest(&self.upstream.digest)?;
+        Ok(&self.upstream.digest)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct InitOutcome {
@@ -60,9 +87,9 @@ fn build_plan(args: &InitArgs) -> Result<InitPlan> {
     let target_root = args
         .target_dir
         .canonicalize()
-        .map_err(|err| DastSpikeError::Usage(format!("target-dir not found: {err}")))?;
+        .map_err(|err| TunerError::Usage(format!("target-dir not found: {err}")))?;
     if !target_root.is_dir() {
-        return Err(DastSpikeError::Usage(format!(
+        return Err(TunerError::Usage(format!(
             "target-dir is not a directory: {}",
             target_root.display()
         )));
@@ -78,11 +105,11 @@ fn build_plan(args: &InitArgs) -> Result<InitPlan> {
     let pin: ZapImagePin = toml::from_str(ZAP_IMAGE_PIN)?;
     pin.validate()?;
     let image_ref = if let Some(image) = args.image.as_deref() {
-        ImageRef::try_from(image).map_err(DastSpikeError::Usage)?
+        ImageRef::parse(image).map_err(|err| TunerError::Usage(err.to_string()))?
     } else {
-        ImageRef::from_digest(pin.our_digest()?)
+        image_ref_from_digest(pin.our_digest()?)?
     };
-    let image_full_ref = image_ref.full_ref(DEFAULT_IMAGE_REPO);
+    let image_full_ref = image_ref.as_canonical_string();
     let upstream_digest = pin.upstream_digest()?.to_string();
 
     let threat_model_path = find_threat_model(&target_root);
@@ -191,7 +218,7 @@ fn build_manifest(plan: &InitPlan, mappings: &[SelectedMapping]) -> Result<Manif
         schema_version: "1.0".to_string(),
         generated_at: Utc::now().to_rfc3339(),
         generated_by_zaprun_version: env!("CARGO_PKG_VERSION").to_string(),
-        image_digest: plan.image_ref.digest().to_string(),
+        image_digest: image_digest_string(&plan.image_ref),
         upstream_image_digest: plan.upstream_digest.clone(),
         threat_model_sha: plan.threat_model_sha.clone(),
         cwes_claimed: plan.cwes_claimed.clone(),
@@ -465,10 +492,30 @@ fn validate_target_url(url: &str) -> Result<()> {
     if valid {
         Ok(())
     } else {
-        Err(DastSpikeError::Usage(
+        Err(TunerError::Usage(
             "deployment-target must be an http(s) URL without control characters".to_string(),
         ))
     }
+}
+
+fn validate_digest(value: &str) -> Result<()> {
+    let digest_re = Regex::new(r"^sha256:[0-9a-f]{64}$")?;
+    if digest_re.is_match(value) {
+        Ok(())
+    } else {
+        Err(TunerError::Usage(
+            "image digest must match ^sha256:[0-9a-f]{64}$".to_string(),
+        ))
+    }
+}
+
+fn image_ref_from_digest(digest: &str) -> Result<ImageRef> {
+    ImageRef::parse(&format!("{DEFAULT_IMAGE_REPO}@{digest}"))
+        .map_err(|err| TunerError::Usage(err.to_string()))
+}
+
+fn image_digest_string(image_ref: &ImageRef) -> String {
+    format!("sha256:{}", image_ref.sha256_hex())
 }
 
 fn level_as_str(level: &RuleLevel) -> &'static str {
@@ -496,6 +543,6 @@ pub fn current_snapshot(target_root: &Path) -> Result<ReDeriveSnapshot> {
     Ok(ReDeriveSnapshot {
         threat_model_sha: plan.threat_model_sha,
         cwes_claimed: plan.cwes_claimed,
-        image_digest: plan.image_ref.digest().to_string(),
+        image_digest: image_digest_string(&plan.image_ref),
     })
 }

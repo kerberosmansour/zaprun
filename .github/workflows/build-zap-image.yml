@@ -84,11 +84,13 @@ jobs:
           docker run --rm --entrypoint /usr/local/bin/zap-api-scan.py "$IMAGE" -h >/tmp/zap-api-scan-help.txt
           grep 'Usage: zap-api-scan.py' /tmp/zap-api-scan-help.txt
           # Ticket #2: zaprun baked-in CLI smokes.
+          expected_version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/zaprun/Cargo.toml | head -1)"
           docker run --rm --entrypoint stat "$IMAGE" -c '%U %G %a' /usr/local/bin/zaprun | grep -E '^zap zap 0?755$'
+          docker run --rm "$IMAGE" zaprun --version | grep -Fx "zaprun ${expected_version}"
           docker run --rm "$IMAGE" zaprun --help >/tmp/zaprun-root-help.txt
           grep -F 'Examples:'   /tmp/zaprun-root-help.txt
           grep -F 'Exit codes:' /tmp/zaprun-root-help.txt
-          for sub in scan api doctor plan observe calibrate explain; do
+          for sub in scan api doctor plan observe calibrate init rederive triage-sarif explain; do
             docker run --rm "$IMAGE" zaprun "$sub" --help >"/tmp/zaprun-$sub-help.txt"
             grep -F 'Examples:' "/tmp/zaprun-$sub-help.txt"
           done

@@ -373,8 +373,13 @@ Reads SARIF 2.1.0 plus target route/OpenAPI context, then writes a conservative
 triage report, endpoint x CWE guided scan map, and filtered SARIF containing
 only findings already validated by ZAP.";
 
+const TRIAGE_SARIF_AFTER_HELP: &str = "\
+Examples:
+  zaprun triage-sarif --target-dir /path/to/webapp \\
+    --sarif ./sast.sarif --output output/zaprun-triage";
+
 #[derive(Debug, Args)]
-#[command(long_about = TRIAGE_SARIF_LONG_ABOUT)]
+#[command(long_about = TRIAGE_SARIF_LONG_ABOUT, after_help = TRIAGE_SARIF_AFTER_HELP)]
 pub struct TriageSarifArgs {
     /// Target repository containing route/OpenAPI context.
     #[arg(long, default_value = ".")]
@@ -456,30 +461,21 @@ pub fn run() -> StdExit {
 }
 
 fn cmd_init(a: InitArgs) -> Result<ExitCode, ZapshootError> {
-    dast_spike::init::run(dast_spike::cli::InitArgs {
-        target_dir: a.target_dir,
-        deployment_target: a.deployment_target,
-        image: a.image,
-    })
-    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    crate::init::run(a)?;
     Ok(ExitCode::Pass)
 }
 
 fn cmd_rederive(a: ReDeriveArgs) -> Result<ExitCode, ZapshootError> {
-    dast_spike::rederive::run(dast_spike::cli::ReDeriveArgs {
-        target_dir: a.target_dir,
-    })
-    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    crate::rederive::run(a)?;
     Ok(ExitCode::Pass)
 }
 
 fn cmd_triage_sarif(a: TriageSarifArgs) -> Result<ExitCode, ZapshootError> {
-    dast_spike::triage_sarif::run(dast_spike::triage_sarif::TriageSarifOptions {
+    crate::triage_sarif::run(crate::triage_sarif::TriageSarifOptions {
         target_dir: a.target_dir,
         sarif: a.sarif,
         output: a.output,
-    })
-    .map_err(|err| ZapshootError::Io(err.to_string()))?;
+    })?;
     Ok(ExitCode::Pass)
 }
 

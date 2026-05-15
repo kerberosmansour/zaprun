@@ -2,7 +2,7 @@
 
 `zaprun` is a point-and-shoot ZAP driver: it builds an OWASP ZAP Automation Framework plan, runs ZAP via a digest-pinned container, and writes a stable set of artifacts so CI gates and humans can reason about results the same way.
 
-This manual is the canonical reference for v0.1.0. It is generated against the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.1.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun) — every flag, default value, and example below is what `zaprun --help` and `zaprun <subcommand> --help` actually print.
+This manual is the canonical reference for v0.2.0. It is generated against the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.2.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun) — every flag, default value, and example below is what `zaprun --help` and `zaprun <subcommand> --help` actually print.
 
 ## Install
 
@@ -14,7 +14,7 @@ cargo install zaprun
 
 # 2. From the prebuilt image — no Rust toolchain needed. Linux-amd64-native;
 #    on macOS arm64 the image runs via Rosetta / QEMU emulation.
-docker pull ghcr.io/kerberosmansour/zaprun:v0.1.0
+docker pull ghcr.io/kerberosmansour/zaprun:v0.2.0
 
 # 3. From source.
 git clone https://github.com/kerberosmansour/zaprun
@@ -63,7 +63,7 @@ Two distribution surfaces:
 1. **Baked into the image** at `/usr/local/bin/zaprun`. Pull the digest-pinned image and invoke `zaprun` as the first argument. This is the canonical way to run scans — no host Rust toolchain required.
 2. **Built from source** by cloning the repo and running `cargo build --release -p zaprun`. The resulting binary lives at `target/release/zaprun`. Useful for development; for scans it's still better to use the image because the image bundles the matching ZAP runtime + add-ons + helper scripts.
 
-The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.1.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.2.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
 
 ## Invocation patterns
 
@@ -72,7 +72,7 @@ The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.1.0`, `:e
 ```bash
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649 \
+  ghcr.io/kerberosmansour/zaprun@sha256:<digest> \
   zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 ```
 
@@ -147,7 +147,7 @@ zaprun doctor
 zaprun doctor --probe-target http://localhost:3001
 
 # Validate a specific image digest is well-formed and pullable
-zaprun doctor --image ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649
+zaprun doctor --image ghcr.io/kerberosmansour/zaprun@sha256:<digest>
 ```
 
 Writes: `capabilities.json`.
@@ -180,7 +180,7 @@ zaprun plan http://localhost:3001 --dry-run --output output/zaprun-plan
 
 Writes: `plan.yaml`, `run.json`.
 
-Note: in v0.1.0 (MVP1), `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
+Note: in v0.2.0 (MVP1), `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
 
 ### `scan`
 
@@ -220,7 +220,7 @@ zaprun scan https://example.test --passive
 
 # Pin a specific image digest (CI lane that wants reproducibility-by-digest)
 zaprun scan http://localhost:4000 --active \
-  --image ghcr.io/kerberosmansour/zaprun@sha256:1caa4c454beac1a5ca67bb06484282b94e43a5cd01ba772ec1a2b78a6ed4c649
+  --image ghcr.io/kerberosmansour/zaprun@sha256:<digest>
 
 # Direct output to a per-CI-job dir
 zaprun scan http://localhost:4000 --active --output output/zaprun-pr-1234
@@ -332,11 +332,11 @@ zaprun calibrate ./calibration/nodegoat.toml \
 
 Writes: calibration-results JSON in the output directory.
 
-In v0.1.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
+In v0.2.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
 
 ### `explain`
 
-Explain a previous run directory (MVP2 — placeholder in v0.1.0).
+Explain a previous run directory (MVP2 — placeholder in v0.2.0).
 
 ```text
 Usage: zaprun explain <RUN_DIR>
@@ -390,7 +390,7 @@ mkdir -p output && chmod 0777 output
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun scan http://host.docker.internal:4000 \
     --active --profile spa-pr --scan-timeout 30m
 
@@ -414,7 +414,7 @@ docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v /tmp/openapi.yaml:/spec/openapi.yaml:ro \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun api /spec/openapi.yaml \
     --target http://host.docker.internal:3001 \
     --active
@@ -439,7 +439,7 @@ REQ
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v "$PWD/req.http:/in/req.http:ro" \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun observe \
     --request /in/req.http \
     --target https://staging.example.test
@@ -476,7 +476,7 @@ Generic rule candidates must pass the gate before they belong in this repository
 # Run the scan…
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun:v0.1.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
   zaprun scan http://host.docker.internal:4000 --active
 SCAN_EXIT=$?
 
