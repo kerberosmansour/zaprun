@@ -9,6 +9,7 @@ use crate::error::ZapshootError;
 use crate::exit::ExitCode;
 use crate::observe::{cmd_observe, ObserveOptions};
 use crate::plan::{Job, Plan};
+use crate::ptk::{cmd_ptk, PtkOptions};
 use crate::run_meta::{canonicalize_run_dir, RunMeta};
 use crate::scan_api::{cmd_api, ApiOptions};
 use crate::scan_url::{cmd_scan_url, ScanUrlOptions};
@@ -50,6 +51,9 @@ Examples:
   # Active scan an OpenAPI spec
   zaprun api ./openapi.yaml --target http://localhost:3001 --active
 
+  # Browser-backed OWASP PTK Phase 1 scan
+  zaprun ptk http://host.docker.internal:4000 --output output/zaprun-ptk
+
   # Bootstrap target-owned DAST config and workflow
   zaprun init --target-dir /path/to/webapp --deployment-target https://staging.example.test
 
@@ -88,6 +92,8 @@ pub enum Commands {
     Doctor(DoctorArgs),
     /// Build an Automation Framework plan (M2).
     Plan(PlanArgs),
+    /// Run an OWASP PTK Phase 1 scan through the Client Spider.
+    Ptk(PtkArgs),
     /// Send a candidate request and observe ZAP alerts (M5).
     Observe(ObserveArgs),
     /// Class-based calibration against expected plugin IDs (M5).
@@ -410,6 +416,53 @@ pub struct ExplainArgs {
     pub run_dir: PathBuf,
 }
 
+const PTK_LONG_ABOUT: &str = "\
+Run an OWASP PTK Phase 1 scan against a web target.
+
+PTK Phase 1 uses ZAP's Client Spider to drive a real browser with PTK enabled.
+The scanner image must already have the Client Side Integration and OWASP PTK
+add-ons baked in; zaprun never installs Marketplace add-ons at runtime.";
+
+const PTK_AFTER_HELP: &str = "\
+Examples:
+  # Run a PTK Phase 1 scan with one Firefox browser
+  zaprun ptk http://host.docker.internal:4000 --output output/zaprun-ptk
+
+  # Materialise the PTK Automation Framework plan without running Docker
+  zaprun ptk http://localhost:4000 --dry-run --output output/zaprun-ptk-plan
+
+  # Use a locally published digest-pinned image
+  zaprun ptk http://host.docker.internal:4000 \\
+    --image localhost:5001/zaprun@sha256:<64-hex>";
+
+#[derive(Debug, Args)]
+#[command(long_about = PTK_LONG_ABOUT, after_help = PTK_AFTER_HELP)]
+pub struct PtkArgs {
+    /// Target URL to scan (http or https).
+    pub url: String,
+    /// Selenium browser ID for the Client Spider.
+    #[arg(long, default_value = "firefox-headless")]
+    pub browser_id: String,
+    /// Number of browsers for Client Spider. Bounded to 1..=2.
+    #[arg(long, default_value_t = 1)]
+    pub browsers: u64,
+    /// Client Spider duration budget (e.g. `3m`, `180s`).
+    #[arg(long, default_value = "3m")]
+    pub max_duration: String,
+    /// Output directory for plan.yaml/run.json/summary.json/zap-report.*.
+    #[arg(long, default_value = "./output/zaprun-ptk")]
+    pub output: PathBuf,
+    /// Optional image reference (`<repo>@sha256:<64-hex>`); defaults to the pinned digest.
+    #[arg(long)]
+    pub image: Option<String>,
+    /// Total scan timeout (e.g. `8m`, `30m`).
+    #[arg(long, default_value = "10m")]
+    pub scan_timeout: String,
+    /// Materialise plan.yaml and run.json but do not start Docker.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
 /// Parse args, dispatch, and return a stable process exit code.
 pub fn run() -> StdExit {
     let cli = Cli::parse();
@@ -431,6 +484,16 @@ pub fn run() -> StdExit {
             target: a.target,
             active: a.active,
             output: a.output,
+        }),
+        Commands::Ptk(a) => cmd_ptk(&PtkOptions {
+            url: a.url,
+            browser_id: a.browser_id,
+            browsers: a.browsers,
+            max_duration: a.max_duration,
+            output: a.output,
+            image: a.image,
+            scan_timeout: a.scan_timeout,
+            dry_run: a.dry_run,
         }),
         Commands::Observe(a) => cmd_observe(&ObserveOptions {
             request: a.request,

@@ -3,11 +3,14 @@
 //! `Plan` is the only public way to produce `plan.yaml` for the Docker backend.
 //! There is no parser for user-supplied YAML in MVP1 -- callers always emit.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
 const MAX_JOBS: usize = 32;
+const MAX_CLIENT_SPIDER_BROWSERS: u64 = 2;
 
 #[derive(Debug, Clone, Error)]
 pub enum PlanError {
@@ -17,6 +20,10 @@ pub enum PlanError {
     EnvNoContexts,
     #[error("addon_update_in_ci: live add-on installs/updates are forbidden in CI mode")]
     AddonUpdateInCi,
+    #[error(
+        "client_spider_browser_count_out_of_bounds: spiderClient numberOfBrowsers must be 1..=2"
+    )]
+    ClientSpiderBrowserCountOutOfBounds,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -28,12 +35,32 @@ pub struct Plan {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Env {
     pub contexts: Vec<Context>,
+    pub ptk_config: Option<PtkConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Context {
     pub name: String,
     pub urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PtkConfig {
+    pub automated_scanning: bool,
+    pub sast: bool,
+    pub iast: bool,
+    pub dast: bool,
+}
+
+impl PtkConfig {
+    pub fn phase1() -> Self {
+        Self {
+            automated_scanning: true,
+            sast: true,
+            iast: true,
+            dast: true,
+        }
+    }
 }
 
 /// AF plan job. Tagged enum -- the tag is the YAML `type:` field.
@@ -52,6 +79,12 @@ pub enum Job {
         url: String,
         browser_id: String,
         max_duration_seconds: u64,
+    },
+    SpiderClient {
+        url: String,
+        browser_id: String,
+        max_duration_seconds: u64,
+        number_of_browsers: u64,
     },
     OpenApi {
         api_file: String,
@@ -78,6 +111,7 @@ pub enum Job {
 pub struct PlanBuilder {
     contexts: Vec<Context>,
     jobs: Vec<Job>,
+    ptk_config: Option<PtkConfig>,
     ci_mode: bool,
 }
 
@@ -99,6 +133,7 @@ impl Plan {
                     fail_on_warning: false,
                     progress_to_stdout: true,
                 },
+                configs: self.env.ptk_config.as_ref().map(PtkConfig::to_af_configs),
             },
             jobs: self.jobs.iter().map(job_to_yaml).collect(),
         };
@@ -116,6 +151,8 @@ struct PlanYaml<'a> {
 struct EnvYaml<'a> {
     contexts: &'a [Context],
     parameters: EnvParameters,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    configs: Option<BTreeMap<&'static str, bool>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,6 +215,24 @@ fn job_to_yaml(job: &Job) -> JobYaml {
                 "maxDuration": seconds_to_minutes(*max_duration_seconds),
                 "numberOfBrowsers": 1,
                 "inScopeOnly": true,
+            })),
+            policy_definition: None,
+            risks: None,
+        },
+        Job::SpiderClient {
+            url,
+            browser_id,
+            max_duration_seconds,
+            number_of_browsers,
+        } => JobYaml {
+            job_type: "spiderClient",
+            parameters: Some(json!({
+                "context": "default",
+                "url": url,
+                "browserId": browser_id,
+                "maxDuration": seconds_to_minutes(*max_duration_seconds),
+                "numberOfBrowsers": number_of_browsers,
+                "scopeCheck": "Strict",
             })),
             policy_definition: None,
             risks: None,
@@ -249,6 +304,17 @@ fn job_to_yaml(job: &Job) -> JobYaml {
     }
 }
 
+impl PtkConfig {
+    fn to_af_configs(&self) -> BTreeMap<&'static str, bool> {
+        BTreeMap::from([
+            ("ptk.automatedScanning.enabled", self.automated_scanning),
+            ("ptk.scanrules.DAST.enabled", self.dast),
+            ("ptk.scanrules.IAST.enabled", self.iast),
+            ("ptk.scanrules.SAST.enabled", self.sast),
+        ])
+    }
+}
+
 fn seconds_to_minutes(seconds: u64) -> u64 {
     seconds.div_ceil(60).max(1)
 }
@@ -298,6 +364,11 @@ impl PlanBuilder {
         self
     }
 
+    pub fn ptk_config(mut self, config: PtkConfig) -> Self {
+        self.ptk_config = Some(config);
+        self
+    }
+
     pub fn job(mut self, j: Job) -> Self {
         self.jobs.push(j);
         self
@@ -309,6 +380,16 @@ impl PlanBuilder {
         }
         if self.jobs.len() > MAX_JOBS {
             return Err(PlanError::TooManyJobs);
+        }
+        for j in &self.jobs {
+            if let Job::SpiderClient {
+                number_of_browsers, ..
+            } = j
+            {
+                if !(1..=MAX_CLIENT_SPIDER_BROWSERS).contains(number_of_browsers) {
+                    return Err(PlanError::ClientSpiderBrowserCountOutOfBounds);
+                }
+            }
         }
         if self.ci_mode {
             for j in &self.jobs {
@@ -322,6 +403,7 @@ impl PlanBuilder {
         Ok(Plan {
             env: Env {
                 contexts: self.contexts,
+                ptk_config: self.ptk_config,
             },
             jobs: self.jobs,
         })

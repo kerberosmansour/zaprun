@@ -31,6 +31,20 @@ fn spa_pr_records_browser_attempt_and_seed_gap() {
 }
 
 #[test]
+fn ptk_phase1_records_browser_attempt_and_seed_gap() {
+    let c = Coverage::for_ptk_phase1_browser(42);
+    assert_eq!(c.profile, "ptk-phase1");
+    assert!(c.browser.required);
+    assert!(c.browser.available);
+    assert_eq!(c.browser.status, "attempted");
+    assert_eq!(c.crawl.ajax_urls, 42);
+    assert!(c
+        .coverage_gaps
+        .iter()
+        .any(|g| g.kind == CoverageGapKind::SeededJourneysNotConfigured));
+}
+
+#[test]
 fn passive_only_records_gap() {
     let c = Coverage::for_web_pr_passive_only(20);
     assert!(c

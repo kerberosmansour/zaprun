@@ -10,6 +10,7 @@ pub mod image_ref;
 pub mod init;
 pub mod observe;
 pub mod plan;
+pub mod ptk;
 pub mod rederive;
 pub mod report;
 pub mod run_meta;

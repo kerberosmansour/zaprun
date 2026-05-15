@@ -34,6 +34,7 @@ const SUBCOMMANDS: &[&str] = &[
     "api",
     "doctor",
     "plan",
+    "ptk",
     "observe",
     "calibrate",
     "explain",

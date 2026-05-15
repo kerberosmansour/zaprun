@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.0 - 2026-05-15
+
+- Baked ZAP Client Side Integration `client` 0.24.0 and OWASP PTK `ptk` 0.4.0 add-ons into the hardened image with SHA-256 verified downloads.
+- Added typed Automation Framework support for `env.configs` PTK Phase 1 settings and the `spiderClient` job.
+- Added `zaprun ptk <url>` for OWASP PTK Phase 1 scans with deterministic plan/run artifacts and normalised summary, coverage, and SARIF output.
+- Removed the GUI-only ZAP Quick Start add-on from the hardened headless image after PTK config smokes exposed a ZAP 2.17.0 headless startup failure.
+- Added release smoke coverage for PTK add-on presence, PTK config startup, the `zaprun ptk` CLI surface, and extracted `.zap` add-on vulnerability scanning.
+
 ## v0.2.0
 
 - Moved `init`, `rederive`, `triage-sarif`, SARIF parsing, manifest handling, baseline schema handling, path-safe writes, and CWE rule mappings into `crates/zaprun` so the published crate is self-contained.
