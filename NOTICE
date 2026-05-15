@@ -63,7 +63,7 @@ ZAP Docker helper scripts (zap-api-scan.py, zap-baseline.py, zap-full-scan.py, z
    License: Apache License 2.0
    Notice:  Pulled from the upstream ZAP repository at image build, each
             checksum-pinned in `docker/zap/Dockerfile`. The container's
-            `dast-spike-entrypoint` invokes `zap-baseline.py` / `zap-api-scan.py`
+            `zaprun-entrypoint` invokes `zap-baseline.py` / `zap-api-scan.py`
             with explicit `-z` options.
 ================================================================================
 

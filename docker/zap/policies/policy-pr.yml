@@ -1,6 +1,6 @@
 env:
   contexts:
-    - name: dast-spike-pr
+    - name: zaprun-pr
       urls:
         - http://host.docker.internal.*
   parameters:
@@ -21,7 +21,7 @@ jobs:
       enabled: true
   - type: activeScan-policy
     parameters:
-      name: dast-spike-pr
+      name: zaprun-pr
     rules:
       - id: 40026
         name: Cross Site Scripting (DOM Based)
@@ -38,4 +38,3 @@ jobs:
         - org.graalvm.polyglot.*
         - Context.create
         - Engine.create
-

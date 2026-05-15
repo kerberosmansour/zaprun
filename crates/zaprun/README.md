@@ -81,7 +81,7 @@ docker run --rm \
   zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 ```
 
-The first positional argument after the image ref selects the inner CLI: the entrypoint dispatches `zaprun` → the baked binary; anything else falls through to a legacy `dast-spike-entrypoint` that accepts `--target` / `--output-dir` / `--policy` for backwards compatibility with previous ZAP harnesses (see [image entrypoint dispatch](#image-entrypoint-dispatch) for the literal-equality rule).
+The first positional argument after the image ref selects the inner CLI: the entrypoint dispatches `zaprun` -> the baked binary; anything else falls through to the image's compatibility scan harness, which accepts `--target` / `--output-dir` / `--policy` for existing ZAP jobs (see [image entrypoint dispatch](#image-entrypoint-dispatch) for the literal-equality rule).
 
 ### From a local build
 
@@ -410,10 +410,10 @@ if [ "${1:-}" = "zaprun" ]; then
   shift
   exec /usr/local/bin/zaprun "$@"
 fi
-# Otherwise: fall through to dast-spike-entrypoint (the legacy --target/--output-dir/--policy harness).
+# Otherwise: fall through to the compatibility --target/--output-dir/--policy scan harness.
 ```
 
-The literal check (no regex, no case-fold, no `eval`) is a deliberate security property: shell metacharacters in `$1` are NEVER expanded. An invocation like `docker run … "zaprun; echo PWNED"` does NOT match `"zaprun"` and falls through to the legacy entrypoint, which rejects with `unknown argument: zaprun; echo PWNED`. The argv-injection abuse case is exercised in `.github/workflows/build-zap-image.yml`'s `Smoke test final image` step.
+The literal check (no regex, no case-fold, no `eval`) is a deliberate security property: shell metacharacters in `$1` are NEVER expanded. An invocation like `docker run … "zaprun; echo PWNED"` does NOT match `"zaprun"` and falls through to the compatibility scan harness, which rejects with `unknown argument: zaprun; echo PWNED`. The argv-injection abuse case is exercised in `.github/workflows/build-zap-image.yml`'s `Smoke test final image` step.
 
 ## Reaching the target from inside the scanner
 

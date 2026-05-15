@@ -1,6 +1,6 @@
 env:
   contexts:
-    - name: dast-spike-nightly
+    - name: zaprun-nightly
       urls:
         - http://host.docker.internal.*
   parameters:
@@ -21,7 +21,7 @@ jobs:
       enabled: true
   - type: activeScan-policy
     parameters:
-      name: dast-spike-nightly
+      name: zaprun-nightly
       attackStrength: LOW
       alertThreshold: MEDIUM
       scannerThreadPerHost: 1
@@ -42,4 +42,3 @@ jobs:
         - org.graalvm.polyglot.*
         - Context.create
         - Engine.create
-

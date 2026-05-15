@@ -75,7 +75,7 @@ Consumer repo `.zaprun/` directory (emitted by `zaprun init`)
 | Consumer workflow → our published image | pull | `@sha256:<digest>` enforced by the CLI's `--image` parsing; SLSA Build Provenance attestation available. |
 | ZAP container → target service under test | network (Docker bridge) | Local-only; target binds 127.0.0.1; ZAP container reaches it via `host.docker.internal`. |
 | GHA runner → consumer's repo | inbound | `pull_request` only; never `pull_request_target`; analysis job runs with `permissions: contents: read` and no `issues: write`. |
-| Image entrypoint argv | inbound | Literal-string-equality dispatch (`if [ "${1:-}" = "zaprun" ]; then …`). No regex, no case-fold, no `eval`. Unknown first-arg falls through to a legacy entrypoint that rejects with `unknown argument: <arg>`. |
+| Image entrypoint argv | inbound | Literal-string-equality dispatch (`if [ "${1:-}" = "zaprun" ]; then …`). No regex, no case-fold, no `eval`. Unknown first-arg falls through to the compatibility scan harness, which rejects with `unknown argument: <arg>`. |
 
 ## Component responsibilities
 
@@ -116,7 +116,7 @@ Standalone rule-promotion gate. Candidate JavaScript DAST rules must declare met
 
 ### `docker/zap/` (Dockerfile + entrypoint + default policies)
 
-Builds `ghcr.io/kerberosmansour/zaprun`. Wolfi base (digest-pinned), OpenJDK plus the official ZAP release tarball (SHA-256-pinned), checksum-pinned ZAP Docker helper scripts, the `API-Minimal` active-scan policy payload, optional add-ons that fail extracted-archive vulnerability scans excluded, checksum-pinned patched add-on replacements where ZAP core bundles stale copies. Layers UID 1000, default policies (`policy-pr.yml`, `policy-nightly.yml`), the Tier 1 passive DOM-XSS heuristic script, the entrypoint that gates Tier 3 behind `DAST_SPIKE_DOM_XSS_ENABLED=1`, and `_JAVA_OPTIONS=-Xmx4g -XX:+UseG1GC -Xss2m`.
+Builds `ghcr.io/kerberosmansour/zaprun`. Wolfi base (digest-pinned), OpenJDK plus the official ZAP release tarball (SHA-256-pinned), checksum-pinned ZAP Docker helper scripts, the `API-Minimal` active-scan policy payload, optional add-ons that fail extracted-archive vulnerability scans excluded, checksum-pinned patched add-on replacements where ZAP core bundles stale copies. Layers UID 1000, default policies (`policy-pr.yml`, `policy-nightly.yml`), the Tier 1 passive DOM-XSS heuristic script, the entrypoint that gates Tier 3 behind `ZAPRUN_DOM_XSS_ENABLED=1`, and `_JAVA_OPTIONS=-Xmx4g -XX:+UseG1GC -Xss2m`.
 
 ### `templates/dast-workflow.yml`
 

@@ -45,7 +45,7 @@ docker run --rm \
 zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 ```
 
-The image's entrypoint dispatches on the first argument: `zaprun` hands off to the baked-in CLI; anything else falls through to a legacy entrypoint that accepts `--target` / `--output-dir` / `--policy` flags for backwards compatibility with existing ZAP harnesses.
+The image's entrypoint dispatches on the first argument: `zaprun` hands off to the baked-in CLI; anything else falls through to a compatibility scan harness that accepts `--target` / `--output-dir` / `--policy` flags for existing ZAP jobs.
 
 Full subcommand reference, exit codes, the artifact-contract schemas, end-to-end examples, and a per-platform support matrix are in the **[CLI manual](crates/zaprun/README.md)** (also published as the crate's landing page on [crates.io/crates/zaprun](https://crates.io/crates/zaprun)).
 

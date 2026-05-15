@@ -98,7 +98,7 @@ ENV ZAP_HOME=/opt/zap \
     HOME=/home/zap \
     PATH="/opt/zap:${PATH}" \
     _JAVA_OPTIONS="-Xmx4g -Xss2m -XX:+UseG1GC -XX:MaxGCPauseMillis=200" \
-    DAST_SPIKE_DOM_XSS_ENABLED=0
+    ZAPRUN_DOM_XSS_ENABLED=0
 
 RUN addgroup -g 1000 zap 2>/dev/null || true && \
     adduser -D -u 1000 -G zap -h /home/zap zap 2>/dev/null || true && \
@@ -110,10 +110,10 @@ RUN addgroup -g 1000 zap 2>/dev/null || true && \
 # NB: build context is the repository root, so COPY sources are repo-relative.
 COPY --chown=1000:1000 docker/zap/policies/ /zap/policies/
 COPY --chown=1000:1000 docker/zap/scripts/ /zap/scripts/passive/
-COPY --chown=1000:1000 docker/zap/entrypoint.sh /usr/local/bin/dast-spike-entrypoint
+COPY --chown=1000:1000 docker/zap/entrypoint.sh /usr/local/bin/zaprun-entrypoint
 COPY --from=cargo-build --chown=1000:1000 /build/target/release/zaprun /usr/local/bin/zaprun
-RUN chmod 0755 /usr/local/bin/dast-spike-entrypoint /usr/local/bin/zaprun
+RUN chmod 0755 /usr/local/bin/zaprun-entrypoint /usr/local/bin/zaprun
 
 USER 1000:1000
 WORKDIR /zap
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dast-spike-entrypoint"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/zaprun-entrypoint"]

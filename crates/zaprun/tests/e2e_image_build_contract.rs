@@ -6,6 +6,8 @@ fn dockerfile_builds_zaprun_from_current_workspace_sources() {
     assert!(dockerfile.contains("cargo build -p zaprun --release --locked"));
     assert!(dockerfile.contains("COPY --from=cargo-build"));
     assert!(dockerfile.contains("/build/target/release/zaprun /usr/local/bin/zaprun"));
+    assert!(dockerfile.contains("/usr/local/bin/zaprun-entrypoint"));
+    assert!(!dockerfile.contains("/usr/local/bin/dast-spike-entrypoint"));
 }
 
 #[test]
@@ -30,6 +32,7 @@ fn image_workflow_smokes_current_zaprun_cli_surface() {
             "build-zap-image.yml must smoke-test `zaprun {subcommand} --help`"
         );
     }
+    assert!(!workflow.contains("dast-spike-entrypoint"));
 }
 
 fn repo_root() -> std::path::PathBuf {
