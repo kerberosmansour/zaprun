@@ -53,6 +53,12 @@ ARG ZAP_LINUX_TGZ_URL=https://github.com/zaproxy/zaproxy/releases/download/${ZAP
 ARG ZAP_NETWORK_ADDON_VERSION=0.27.0
 ARG ZAP_NETWORK_ADDON_SHA256=1ee957c473eca42865417115a126927790dbc972771cc86354d0f7f0cc7edbb9
 ARG ZAP_NETWORK_ADDON_URL=https://github.com/zaproxy/zap-extensions/releases/download/network-v${ZAP_NETWORK_ADDON_VERSION}/network-beta-${ZAP_NETWORK_ADDON_VERSION}.zap
+ARG ZAP_CLIENT_ADDON_VERSION=0.24.0
+ARG ZAP_CLIENT_ADDON_SHA256=779510906f67fc62e5cd535e13663f3d374ef3270818c8333264fc81c13826a9
+ARG ZAP_CLIENT_ADDON_URL=https://github.com/zaproxy/zap-extensions/releases/download/client-v${ZAP_CLIENT_ADDON_VERSION}/client-alpha-${ZAP_CLIENT_ADDON_VERSION}.zap
+ARG ZAP_PTK_ADDON_VERSION=0.4.0
+ARG ZAP_PTK_ADDON_SHA256=67ccb8873bac57b60d51920da015469e0afee767e148968bc647f72fbc07f224
+ARG ZAP_PTK_ADDON_URL=https://github.com/zaproxy-addons/ptk/releases/download/v${ZAP_PTK_ADDON_VERSION}/ptk-alpha-${ZAP_PTK_ADDON_VERSION}.zap
 ARG ZAP_API_SCAN_SHA256=f37e812e26733ea5e5f071ecbe08ed443671280fa1336be29f5c7e4ab3b4a029
 ARG ZAP_BASELINE_SHA256=18df1d2275c2cc7113ec4dd061687f8c9d6b9032b2e9d7e561bcd173236eda42
 ARG ZAP_FULL_SCAN_SHA256=45896f6d66e48697a20a3a5469943757b2f5ee77487655eaf89a2ec4af4d2217
@@ -61,7 +67,7 @@ ARG ZAP_API_MINIMAL_POLICY_SHA256=029a8670ff8f78a5a2af027c3667bf25500c6e2bed7996
 ARG ZAP_HTTP_RESPONSE_SCRIPT_SHA256=f24c7c209b2a62dab78a072f67ee2248aaa7cb287b1faa85b2001cf9994ea964
 ARG ZAP_UNEXPECTED_CONTENT_SCRIPT_SHA256=2be9938cf3070e940dc96f7b6f72149309682f60c8a3411051d3e475c3905956
 
-# Exclude optional or stale add-on archives until their bundled Java dependencies are refreshed upstream.
+# Exclude optional, stale, or GUI-only add-on archives until their bundled Java dependencies are refreshed upstream.
 RUN curl -fsSL "${ZAP_LINUX_TGZ_URL}" -o /tmp/zap-linux.tar.gz && \
     echo "${ZAP_LINUX_TGZ_SHA256}  /tmp/zap-linux.tar.gz" | sha256sum -c - && \
     mkdir -p /opt/zap /usr/local/bin /home/zap/.ZAP/policies /home/zap/.ZAP_D/policies /home/zap/.ZAP_D/scripts/scripts/httpsender && \
@@ -69,9 +75,16 @@ RUN curl -fsSL "${ZAP_LINUX_TGZ_URL}" -o /tmp/zap-linux.tar.gz && \
     rm -f /tmp/zap-linux.tar.gz && \
     find /opt/zap -type f \( -name "*.bat" -o -name "*.exe" -o -name "*.dll" -o -name "*.dylib" \) -delete && \
     rm -f /opt/zap/plugin/fuzz-*.zap && \
+    rm -f /opt/zap/plugin/quickstart-*.zap && \
     rm -f /opt/zap/plugin/network-beta-*.zap && \
+    rm -f /opt/zap/plugin/client-alpha-*.zap && \
+    rm -f /opt/zap/plugin/ptk-alpha-*.zap && \
     curl -fsSL "${ZAP_NETWORK_ADDON_URL}" -o "/opt/zap/plugin/network-beta-${ZAP_NETWORK_ADDON_VERSION}.zap" && \
     echo "${ZAP_NETWORK_ADDON_SHA256}  /opt/zap/plugin/network-beta-${ZAP_NETWORK_ADDON_VERSION}.zap" | sha256sum -c - && \
+    curl -fsSL "${ZAP_CLIENT_ADDON_URL}" -o "/opt/zap/plugin/client-alpha-${ZAP_CLIENT_ADDON_VERSION}.zap" && \
+    echo "${ZAP_CLIENT_ADDON_SHA256}  /opt/zap/plugin/client-alpha-${ZAP_CLIENT_ADDON_VERSION}.zap" | sha256sum -c - && \
+    curl -fsSL "${ZAP_PTK_ADDON_URL}" -o "/opt/zap/plugin/ptk-alpha-${ZAP_PTK_ADDON_VERSION}.zap" && \
+    echo "${ZAP_PTK_ADDON_SHA256}  /opt/zap/plugin/ptk-alpha-${ZAP_PTK_ADDON_VERSION}.zap" | sha256sum -c - && \
     chmod +x /opt/zap/zap.sh && \
     curl -fsSL "https://raw.githubusercontent.com/zaproxy/zaproxy/${ZAP_RELEASE_TAG}/docker/zap-api-scan.py" -o /usr/local/bin/zap-api-scan.py && \
     echo "${ZAP_API_SCAN_SHA256}  /usr/local/bin/zap-api-scan.py" | sha256sum -c - && \

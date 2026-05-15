@@ -2,7 +2,7 @@
 
 `zaprun` is a point-and-shoot ZAP driver: it builds an OWASP ZAP Automation Framework plan, runs ZAP via a digest-pinned container, and writes a stable set of artifacts so CI gates and humans can reason about results the same way.
 
-This manual is the canonical reference for v0.2.0. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.2.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
+This manual is the canonical reference for v0.3.0. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.3.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
 
 ## Install
 
@@ -14,7 +14,7 @@ cargo install zaprun
 
 # 2. From the prebuilt image — no Rust toolchain needed. Linux-amd64-native;
 #    on macOS arm64 the image runs via Rosetta / QEMU emulation.
-docker pull ghcr.io/kerberosmansour/zaprun:v0.2.0
+docker pull ghcr.io/kerberosmansour/zaprun:v0.3.0
 
 # 3. From source.
 git clone https://github.com/kerberosmansour/zaprun
@@ -58,6 +58,7 @@ The Rust code is pure portable Rust (`rustls-tls`, no `native-tls`; `getrandom` 
   - [`plan`](#plan)
   - [`scan`](#scan)
   - [`api`](#api)
+  - [`ptk`](#ptk)
   - [`observe`](#observe)
   - [`init`](#init)
   - [`rederive`](#rederive)
@@ -76,7 +77,7 @@ Two distribution surfaces:
 1. **Baked into the image** at `/usr/local/bin/zaprun`. Pull the digest-pinned image and invoke `zaprun` as the first argument. This is the canonical way to run scans — no host Rust toolchain required.
 2. **Built from source** by cloning the repo and running `cargo build --release -p zaprun`. The resulting binary lives at `target/release/zaprun`. Useful for development; for scans it's still better to use the image because the image bundles the matching ZAP runtime + add-ons + helper scripts.
 
-The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.2.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.3.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
 
 `zaprun` does not depend on `dast-spike`; the `init`, `rederive`, `triage-sarif`, schema, SARIF, and path-safety code used by the public CLI lives inside this crate.
 
@@ -195,7 +196,7 @@ zaprun plan http://localhost:3001 --dry-run --output output/zaprun-plan
 
 Writes: `plan.yaml`, `run.json`.
 
-Note: in v0.2.0, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
+Note: in v0.3.0, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
 
 ### `scan`
 
@@ -285,6 +286,44 @@ zaprun api ./openapi.yaml --target http://localhost:3001 --active --scan-timeout
 Writes: same set as `scan`, plus the inlined API-Minimal active policy is captured in `plan.yaml` so a reader can reproduce the run from the plan alone.
 
 The inlined policy's SHA-256 is pinned as `API_MINIMAL_POLICY_INLINE_HASH` in `crates/zaprun/src/scan_api.rs`; drift is detected by `crates/zaprun/tests/unit_api_inline_policy.rs`. Changing the policy requires a deliberate, reviewed bump of the pinned hash.
+
+### `ptk`
+
+Run an OWASP PTK Phase 1 scan. This lane uses ZAP's Client Spider to drive a real browser with PTK automation enabled. The scanner image must already contain the Client Side Integration and OWASP PTK add-ons; `zaprun ptk` never emits runtime Marketplace install jobs.
+
+```text
+Usage: zaprun ptk [OPTIONS] <URL>
+
+Arguments:
+  <URL>  Target URL to scan (http or https)
+
+Options:
+      --browser-id <BROWSER_ID>      Selenium browser ID for the Client Spider [default: firefox-headless]
+      --browsers <BROWSERS>          Number of browsers for Client Spider. Bounded to 1..=2 [default: 1]
+      --max-duration <MAX_DURATION>  Client Spider duration budget (e.g. `3m`, `180s`) [default: 3m]
+      --output <OUTPUT>              Output directory for plan.yaml/run.json/summary.json/zap-report.* [default: ./output/zaprun-ptk]
+      --image <IMAGE>                Optional image reference (`<repo>@sha256:<64-hex>`); defaults to the pinned digest
+      --scan-timeout <SCAN_TIMEOUT>  Total scan timeout (e.g. `8m`, `30m`) [default: 10m]
+      --dry-run                      Materialise plan.yaml and run.json but do not start Docker
+  -h, --help                         Print help
+```
+
+**Examples**
+
+```bash
+# Browser-backed PTK Phase 1 scan
+zaprun ptk http://host.docker.internal:4000 --output output/zaprun-ptk
+
+# Inspect the generated Automation Framework plan without running Docker
+zaprun ptk http://localhost:4000 --dry-run --output output/zaprun-ptk-plan
+
+# Keep browser load low but allow a deeper Client Spider crawl
+zaprun ptk http://host.docker.internal:4000 --browsers 1 --max-duration 8m
+```
+
+Writes: `plan.yaml`, `run.json`, `summary.json`, `coverage.json`, `capabilities.json`, `zap-report.json`, `zap-report.html`, `zap.sarif` on a real scan; `--dry-run` writes only `plan.yaml` and `run.json`.
+
+Phase 1 limitations: PTK is configured separately from ZAP's active/passive scan policies, PTK findings may overlap with standard ZAP alerts, and unauthenticated browser crawling will miss logged-in flows unless the target itself exposes them without auth. The coverage ledger records the browser-backed crawl and keeps the seeded-journey/authentication gap explicit.
 
 ### `observe`
 
@@ -393,11 +432,11 @@ zaprun calibrate ./calibration/nodegoat.toml \
 
 Writes: calibration-results JSON in the output directory.
 
-In v0.2.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
+In v0.3.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
 
 ### `explain`
 
-Explain a previous run directory (placeholder in v0.2.0).
+Explain a previous run directory (placeholder in v0.3.0).
 
 ```text
 Usage: zaprun explain <RUN_DIR>
@@ -451,7 +490,7 @@ mkdir -p output && chmod 0777 output
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
   zaprun scan http://host.docker.internal:4000 \
     --active --profile spa-pr --scan-timeout 30m
 
@@ -475,7 +514,7 @@ docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v /tmp/openapi.yaml:/spec/openapi.yaml:ro \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
   zaprun api /spec/openapi.yaml \
     --target http://host.docker.internal:3001 \
     --active
@@ -500,7 +539,7 @@ REQ
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v "$PWD/req.http:/in/req.http:ro" \
-  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
   zaprun observe \
     --request /in/req.http \
     --target https://staging.example.test
@@ -537,7 +576,7 @@ Generic rule candidates must pass the gate before they belong in this repository
 # Run the scan…
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun:v0.2.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
   zaprun scan http://host.docker.internal:4000 --active
 SCAN_EXIT=$?
 

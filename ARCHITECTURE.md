@@ -9,7 +9,7 @@
 ```
 zaprun (this repo)
 ─────────────────────────
-crates/zaprun           (the public self-contained CLI — scan/api/observe plus init/rederive/triage-sarif)
+crates/zaprun           (the public self-contained CLI — scan/api/ptk/observe plus init/rederive/triage-sarif)
 crates/zaprun/src/tuner (SARIF parser, curated CWE → scanner-rule mapping, typed schemas, safe writes)
 crates/dast-spike       (legacy scanner-runner experiments; not a zaprun dependency)
 xtasks/dast-verify      (generic-rule and target-owned-rule promotion gate)
@@ -81,7 +81,7 @@ Consumer repo `.zaprun/` directory (emitted by `zaprun init`)
 
 ### `crates/zaprun` (Rust CLI)
 
-The deterministic ZAP driver and public DAST orchestration surface. Subcommands: `doctor`, `plan`, `scan <url> --active`, `api <spec> --target … --active`, `observe`, `calibrate`, `init`, `rederive`, `triage-sarif`, and `explain`. Every successful scan run writes the same artifact set under `--output`:
+The deterministic ZAP driver and public DAST orchestration surface. Subcommands: `doctor`, `plan`, `scan <url> --active`, `api <spec> --target … --active`, `ptk <url>`, `observe`, `calibrate`, `init`, `rederive`, `triage-sarif`, and `explain`. Every successful scan run writes the same artifact set under `--output`:
 
 | File | Schema | Contents |
 |---|---|---|
@@ -96,7 +96,7 @@ The deterministic ZAP driver and public DAST orchestration surface. Subcommands:
 
 Stable exit codes: `0 pass | 1 policy fail | 2 tool error | 3 target unavailable | 4 timeout | 5 coverage fail`.
 
-The active-scan policy used by `api` is inlined into the AF plan as a SHA-256-pinned Rust constant (`API_MINIMAL_POLICY_INLINE`), so there is no dependency on `zap-api-scan.py`, `zap-baseline.py`, `zap-full-scan.py`, `~/.ZAP/policies/*.policy`, or `.ZAP_D` at scan time.
+The active-scan policy used by `api` is inlined into the AF plan as a SHA-256-pinned Rust constant (`API_MINIMAL_POLICY_INLINE`), so there is no dependency on `zap-api-scan.py`, `zap-baseline.py`, `zap-full-scan.py`, `~/.ZAP/policies/*.policy`, or `.ZAP_D` at scan time. The `ptk` lane emits typed `env.configs` PTK Phase 1 settings plus a bounded `spiderClient` job; it relies on image-baked Client Side Integration and PTK add-ons and never installs Marketplace add-ons at runtime.
 
 Per-run 32-byte cryptographically-random ZAP API key, wrapped in `secure_data::SecretString`, persisted to `run.json` at file mode `0600`. Log-injection-resistant tracing mirror via `security_events::sanitize::sanitize_for_text_sink`; the raw `zap.log` is retained verbatim for forensic analysis. SSRF / IMDS guard on `observe --target` (link-local `169.254/16` unconditionally refused; RFC1918 + loopback refused unless `--allow-internal-target`); `--target` for `scan` uses scheme-only validation because loopback is the headline scan target in CI.
 
@@ -116,7 +116,7 @@ Standalone rule-promotion gate. Candidate JavaScript DAST rules must declare met
 
 ### `docker/zap/` (Dockerfile + entrypoint + default policies)
 
-Builds `ghcr.io/kerberosmansour/zaprun`. Wolfi base (digest-pinned), OpenJDK plus the official ZAP release tarball (SHA-256-pinned), checksum-pinned ZAP Docker helper scripts, the `API-Minimal` active-scan policy payload, optional add-ons that fail extracted-archive vulnerability scans excluded, checksum-pinned patched add-on replacements where ZAP core bundles stale copies. Layers UID 1000, default policies (`policy-pr.yml`, `policy-nightly.yml`), the Tier 1 passive DOM-XSS heuristic script, the entrypoint that gates Tier 3 behind `ZAPRUN_DOM_XSS_ENABLED=1`, and `_JAVA_OPTIONS=-Xmx4g -XX:+UseG1GC -Xss2m`.
+Builds `ghcr.io/kerberosmansour/zaprun`. Wolfi base (digest-pinned), OpenJDK plus the official ZAP release tarball (SHA-256-pinned), checksum-pinned ZAP Docker helper scripts, the `API-Minimal` active-scan policy payload, optional add-ons that fail extracted-archive vulnerability scans excluded, checksum-pinned patched add-on replacements where ZAP core bundles stale copies, and PTK Phase 1 add-ons (`client` and `ptk`) baked at build time. Layers UID 1000, default policies (`policy-pr.yml`, `policy-nightly.yml`), the Tier 1 passive DOM-XSS heuristic script, the entrypoint that gates Tier 3 behind `ZAPRUN_DOM_XSS_ENABLED=1`, and `_JAVA_OPTIONS=-Xmx4g -XX:+UseG1GC -Xss2m`.
 
 ### `templates/dast-workflow.yml`
 

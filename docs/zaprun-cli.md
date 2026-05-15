@@ -10,7 +10,7 @@ The crate README contains:
 - Install methods (`cargo install zaprun`, `docker pull`, or build from source).
 - Platform-support matrix (Linux / macOS / Windows; image is `linux/amd64`).
 - Artifact contract and exit codes.
-- Per-subcommand reference for `doctor`, `plan`, `scan`, `api`, `observe`, `calibrate`, `explain`.
+- Per-subcommand reference for `doctor`, `plan`, `scan`, `api`, `ptk`, `observe`, `calibrate`, `explain`.
 - Image entrypoint dispatch (the literal-string-equality security rule).
 - End-to-end examples (NodeGoat dogfood, OpenAPI scan, observe-mode replay, CI exit-code gate).
 - Troubleshooting table.

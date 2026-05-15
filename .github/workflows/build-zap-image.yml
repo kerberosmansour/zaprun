@@ -9,6 +9,7 @@ on:
       - Cargo.toml
       - Cargo.lock
       - references/zap-image-pin.toml
+      - .trivyignore
   pull_request:
     paths:
       - docker/zap/**
@@ -16,6 +17,7 @@ on:
       - Cargo.toml
       - Cargo.lock
       - references/zap-image-pin.toml
+      - .trivyignore
       - .github/workflows/build-zap-image.yml
   workflow_dispatch:
 
@@ -81,6 +83,37 @@ jobs:
           docker run --rm --entrypoint java "$IMAGE" -version
           docker run --rm --entrypoint /opt/zap/zap.sh "$IMAGE" -version
           docker run --rm --entrypoint id "$IMAGE" | grep 'uid=1000(zap)'
+          docker run --rm --entrypoint sh "$IMAGE" -c 'ls /opt/zap/plugin/client-alpha-*.zap /opt/zap/plugin/ptk-alpha-*.zap'
+          docker run --rm --entrypoint /opt/zap/zap.sh "$IMAGE" -cmd -addonlist >/tmp/zap-addon-list.txt
+          grep -E '(^|[[:space:]])client[[:space:]]' /tmp/zap-addon-list.txt
+          grep -E '(^|[[:space:]])ptk[[:space:]]' /tmp/zap-addon-list.txt
+          ! grep -E '(^|[[:space:]])quickstart[[:space:]]' /tmp/zap-addon-list.txt
+          mkdir -p .tmp/ptk-config-smoke
+          cat > .tmp/ptk-config-smoke/plan.yaml <<'YAML'
+          env:
+            contexts:
+            - name: default
+              urls:
+              - http://example.invalid
+            parameters:
+              failOnError: true
+              failOnWarning: false
+              progressToStdout: true
+            configs:
+              ptk.automatedScanning.enabled: true
+          jobs:
+          - type: exitStatus
+            parameters:
+              errorLevel: High
+              warnLevel: Medium
+              okExitValue: 0
+              warnExitValue: 0
+              errorExitValue: 1
+          YAML
+          docker run --rm \
+            -v "$PWD/.tmp/ptk-config-smoke:/zap/wrk:rw" \
+            --entrypoint /opt/zap/zap.sh \
+            "$IMAGE" -cmd -autorun /zap/wrk/plan.yaml
           docker run --rm --entrypoint /usr/local/bin/zap-api-scan.py "$IMAGE" -h >/tmp/zap-api-scan-help.txt
           grep 'Usage: zap-api-scan.py' /tmp/zap-api-scan-help.txt
           # Ticket #2: zaprun baked-in CLI smokes.
@@ -90,7 +123,7 @@ jobs:
           docker run --rm "$IMAGE" zaprun --help >/tmp/zaprun-root-help.txt
           grep -F 'Examples:'   /tmp/zaprun-root-help.txt
           grep -F 'Exit codes:' /tmp/zaprun-root-help.txt
-          for sub in scan api doctor plan observe calibrate init rederive triage-sarif explain; do
+          for sub in scan api doctor plan ptk observe calibrate init rederive triage-sarif explain; do
             docker run --rm "$IMAGE" zaprun "$sub" --help >"/tmp/zaprun-$sub-help.txt"
             grep -F 'Examples:' "/tmp/zaprun-$sub-help.txt"
           done

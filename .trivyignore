@@ -17,7 +17,8 @@
 #   Cannot be patched in our image without rebundling the add-on; the fix
 #   needs to come from ZAP shipping a network-beta release that bundles
 #   newer Netty (or the standalone Network add-on once it goes stable).
-#   Tracking: TODO — file follow-up issue + paste the number here.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
 CVE-2026-42583
 
 # CVE-2025-24970 — Netty SslHandler does not correctly validate packets,
@@ -29,5 +30,51 @@ CVE-2026-42583
 #   the host via the scanner container's egress; the SslHandler attack
 #   surface here is the proxy port (8080 in the container) and is not
 #   exposed to untrusted callers in our CI/CLI usage.
-#   Tracking: TODO — file follow-up issue + paste the number here.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
 CVE-2025-24970
+
+# CVE-2025-55163 — Netty MadeYouReset HTTP/2 DDoS vulnerability.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec-http2 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.124.Final / 4.2.4.Final.
+#   Latest official ZAP Network add-on checked on 2026-05-15 is still
+#   network-v0.27.0; fix requires upstream ZAP add-on rebundle.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
+CVE-2025-55163
+
+# CVE-2026-33870 — Netty request-smuggling via HTTP/1.1 chunked parsing.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec-http 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.132.Final / 4.2.10.Final.
+#   Latest official ZAP Network add-on checked on 2026-05-15 is still
+#   network-v0.27.0; fix requires upstream ZAP add-on rebundle.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
+CVE-2026-33870
+
+# CVE-2026-33871 — Netty denial of service via HTTP/2 CONTINUATION frame flood.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec-http2 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.132.Final / 4.2.11.Final.
+#   Latest official ZAP Network add-on checked on 2026-05-15 is still
+#   network-v0.27.0; fix requires upstream ZAP add-on rebundle.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
+CVE-2026-33871
+
+# CVE-2026-42584 — Netty HTTP parsing vulnerability fixed after the bundled release.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec-http 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.133.Final / 4.2.13.Final.
+#   Latest official ZAP Network add-on checked on 2026-05-15 is still
+#   network-v0.27.0; fix requires upstream ZAP add-on rebundle.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
+CVE-2026-42584
+
+# CVE-2026-42587 — Netty HTTP/1.1 and HTTP/2 vulnerability fixed after the bundled release.
+#   Bundled: ZAP network-beta-0.27.0 add-on → io.netty:netty-codec-http/http2 4.1.100.Final.
+#   Fixed upstream: Netty 4.1.133.Final / 4.2.13.Final.
+#   Latest official ZAP Network add-on checked on 2026-05-15 is still
+#   network-v0.27.0; fix requires upstream ZAP add-on rebundle.
+#   Tracking: https://github.com/kerberosmansour/zaprun/issues/3
+#   expires_or_review_by: 2026-06-15.
+CVE-2026-42587

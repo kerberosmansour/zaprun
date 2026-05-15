@@ -93,6 +93,27 @@ impl Coverage {
         }
     }
 
+    pub fn for_ptk_phase1_browser(client_urls: u32) -> Self {
+        Coverage {
+            schema_version: SCHEMA_VERSION.to_string(),
+            profile: "ptk-phase1".to_string(),
+            browser: BrowserCoverage {
+                required: true,
+                available: true,
+                status: "attempted".to_string(),
+            },
+            crawl: CrawlCoverage {
+                traditional_urls: 0,
+                ajax_urls: client_urls,
+                seeded_requests_sent: 0,
+            },
+            coverage_gaps: vec![CoverageGap {
+                kind: CoverageGapKind::SeededJourneysNotConfigured,
+                message: "ptk-phase1 ran browser-backed Client Spider crawling, but no seeded journeys or authentication were configured".to_string(),
+            }],
+        }
+    }
+
     pub fn for_web_pr_passive_only(traditional_urls: u32) -> Self {
         let mut c = Self::for_web_pr_traditional(traditional_urls, 0, 0);
         c.coverage_gaps.push(CoverageGap {
