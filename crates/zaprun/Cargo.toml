@@ -15,20 +15,17 @@ categories = ["command-line-utilities", "development-tools::testing"]
 [dependencies]
 chrono.workspace = true
 clap.workspace = true
-# Smallest-viable CSPRNG for the per-run 32-byte ZAP API key (CWE-306). std has
-# no cryptographic randomness; getrandom is OS-backed, audited, and already in
-# the transitive graph via the SunLit crates.
-getrandom = "0.2"
+getrandom.workspace = true
 regex.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
-secure_boundary = "0.1.3"
-secure_data = "0.1"
-security_events = "0.1"
-toml.workspace = true
+reqwest.workspace = true
+secure_boundary.workspace = true
+secure_data.workspace = true
+security_events.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 which.workspace = true
@@ -36,7 +33,7 @@ which.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true
-sha2 = "0.10"
+sha2.workspace = true
 tempfile.workspace = true
 
 [lib]
