@@ -79,7 +79,7 @@ jobs:
         # verification), avoiding execution of an unverified prebuilt binary.
         run: |
           set -euo pipefail
-          GOBIN="$HOME/bin"
+          export GOBIN="$HOME/bin"
           mkdir -p "$GOBIN"
           echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/google/go-containerregistry/cmd/crane@v0.20.6
@@ -172,10 +172,11 @@ jobs:
       - name: Install crane
         run: |
           set -euo pipefail
-          GOBIN="$HOME/bin"
+          export GOBIN="$HOME/bin"
           mkdir -p "$GOBIN"
           echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/google/go-containerregistry/cmd/crane@v0.20.6
+          "$GOBIN"/crane version
       - name: Resolve digest for this release
         id: digest
         env:
