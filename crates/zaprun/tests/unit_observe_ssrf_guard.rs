@@ -18,6 +18,7 @@ fn refuses_private_ranges_without_flag() {
         "http://172.16.0.1",
         "http://192.168.1.1",
         "http://127.0.0.1:3000",
+        "http://[::1]:3000",
     ] {
         let err = validate_observe_target(url, false).unwrap_err();
         assert!(
@@ -32,6 +33,7 @@ fn accepts_private_ranges_with_flag() {
     for url in [
         "http://10.0.0.5:8080",
         "http://127.0.0.1:3000",
+        "http://[::1]:3000",
         "http://192.168.1.1",
     ] {
         validate_observe_target(url, true).expect("must accept with --allow-internal-target");
@@ -57,4 +59,32 @@ fn refuses_non_http_scheme() {
 fn accepts_public_target() {
     validate_observe_target("https://api.example.com/v1/users", false)
         .expect("public target must be accepted");
+}
+
+#[test]
+fn refuses_ip_literal_in_userinfo() {
+    let err =
+        validate_observe_target("http://user@169.254.169.254/latest/meta-data", false).unwrap_err();
+    assert!(matches!(err, ObserveTargetError::ImdsBlocked));
+
+    let err = validate_observe_target("http://user@127.0.0.1:8080/debug", false).unwrap_err();
+    assert!(matches!(err, ObserveTargetError::PrivateNetBlocked));
+}
+
+#[test]
+fn refuses_bracketed_ipv6_loopback_without_flag() {
+    let err = validate_observe_target("http://[::1]/", false).unwrap_err();
+    assert!(matches!(err, ObserveTargetError::PrivateNetBlocked));
+}
+
+#[test]
+fn refuses_ipv4_mapped_ipv6_internal_literals_without_flag() {
+    let err = validate_observe_target("http://[::ffff:127.0.0.1]/", false).unwrap_err();
+    assert!(matches!(err, ObserveTargetError::PrivateNetBlocked));
+}
+
+#[test]
+fn refuses_ipv4_mapped_ipv6_imds_unconditionally() {
+    let err = validate_observe_target("http://[::ffff:169.254.169.254]/latest", true).unwrap_err();
+    assert!(matches!(err, ObserveTargetError::ImdsBlocked));
 }
