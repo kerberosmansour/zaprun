@@ -8,6 +8,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
+use secure_boundary::safe_types::SafeUrl;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -64,12 +65,15 @@ pub struct ObserveOptions {
 
 pub fn cmd_observe(opts: &ObserveOptions) -> Result<ExitCode, ZapshootError> {
     // Validate the target URL (CWE-918 SSRF + IMDS unconditional block).
-    if let Err(e) = validate_observe_target(&opts.target, opts.allow_internal_target) {
-        eprintln!("zaprun: {e}");
-        return Err(ZapshootError::Io(
-            format!("target_host_{e:?}").to_lowercase(),
-        ));
-    }
+    let target_url = match validated_observe_target(&opts.target, opts.allow_internal_target) {
+        Ok(target_url) => target_url,
+        Err(e) => {
+            eprintln!("zaprun: {e}");
+            return Err(ZapshootError::Io(
+                format!("target_host_{e:?}").to_lowercase(),
+            ));
+        }
+    };
 
     // Spec/file validation for `--request` -- size cap + traversal guard.
     if let Some(p) = &opts.request {
@@ -80,7 +84,7 @@ pub fn cmd_observe(opts: &ObserveOptions) -> Result<ExitCode, ZapshootError> {
 
     let replay = if let Some(p) = &opts.request {
         let request = parse_raw_request(&std::fs::read(p)?)?;
-        Some(replay_raw_request(&opts.target, &request)?)
+        Some(replay_raw_request(target_url, &request)?)
     } else {
         None
     };
@@ -120,26 +124,33 @@ pub fn cmd_observe(opts: &ObserveOptions) -> Result<ExitCode, ZapshootError> {
 }
 
 pub fn validate_observe_target(url: &str, allow_internal: bool) -> Result<(), ObserveTargetError> {
-    let (scheme, rest) = url
-        .split_once("://")
-        .ok_or(ObserveTargetError::UrlParseError)?;
-    if scheme != "http" && scheme != "https" {
+    validated_observe_target(url, allow_internal).map(|_| ())
+}
+
+fn validated_observe_target(
+    url: &str,
+    allow_internal: bool,
+) -> Result<reqwest::Url, ObserveTargetError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| ObserveTargetError::UrlParseError)?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return Err(ObserveTargetError::SchemeUnsupported);
     }
-    let host_part = rest.split('/').next().unwrap_or(rest);
-    let host = host_part
-        .rsplit_once(':')
-        .map(|(h, _)| h)
-        .unwrap_or(host_part);
+    let host = parsed.host_str().ok_or(ObserveTargetError::UrlParseError)?;
 
-    // Try to parse the host as an IP literal.  If it parses, apply the
-    // SSRF/IMDS guard.  If not, it is a hostname -- accept (resolution-time
-    // checks are out of scope; doing them in MVP1 would require DNS calls
-    // here and would slow the CLI; the doctor command is the right place).
+    // Parse + classify the same authority representation that reqwest will use
+    // for replay. SafeUrl supplies the SunLit default SSRF blocklist when the
+    // operator has not opted into internal targets.
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    let sunlit_rejected = !allow_internal && SafeUrl::try_from(url).is_err();
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return classify_ip(&ip, allow_internal);
+        classify_ip(&ip, allow_internal)?;
+        if sunlit_rejected {
+            return Err(ObserveTargetError::PrivateNetBlocked);
+        }
+    } else if sunlit_rejected {
+        return Err(ObserveTargetError::PrivateNetBlocked);
     }
-    Ok(())
+    Ok(parsed)
 }
 
 fn classify_ip(ip: &IpAddr, allow_internal: bool) -> Result<(), ObserveTargetError> {
@@ -159,6 +170,9 @@ fn classify_ip(ip: &IpAddr, allow_internal: bool) -> Result<(), ObserveTargetErr
             }
         }
         IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return classify_ip(&IpAddr::V4(v4), allow_internal);
+            }
             // Loopback + link-local + ULA -- blocked unless --allow-internal-target.
             let is_private = v6.is_loopback()
                 || (v6.segments()[0] & 0xffc0) == 0xfe80
@@ -255,9 +269,10 @@ fn parse_raw_request(bytes: &[u8]) -> Result<RawRequest, ZapshootError> {
     })
 }
 
-fn replay_raw_request(target: &str, request: &RawRequest) -> Result<ReplayOutcome, ZapshootError> {
-    let mut url = reqwest::Url::parse(target)
-        .map_err(|_| ZapshootError::Io("target_url_parse_error".to_string()))?;
+fn replay_raw_request(
+    mut url: reqwest::Url,
+    request: &RawRequest,
+) -> Result<ReplayOutcome, ZapshootError> {
     let (path, query) = request
         .path
         .split_once('?')

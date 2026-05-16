@@ -3,7 +3,9 @@ use serde_json::Value;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 #[test]
 fn observe_replays_raw_request_and_writes_response_evidence() {
@@ -58,4 +60,49 @@ fn observe_replays_raw_request_and_writes_response_evidence() {
         .as_str()
         .unwrap()
         .starts_with("hash:"));
+}
+
+#[test]
+fn observe_rejects_userinfo_loopback_before_replay() {
+    let temp = tempfile::tempdir().unwrap();
+    let request = temp.path().join("request.http");
+    fs::write(&request, "GET /ssrf HTTP/1.1\r\nHost: example.test\r\n\r\n").unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok(_) => {
+                    let _ = tx.send(true);
+                    return;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = tx.send(false);
+    });
+
+    Command::cargo_bin("zaprun")
+        .unwrap()
+        .arg("observe")
+        .arg("--request")
+        .arg(&request)
+        .arg("--target")
+        .arg(format!("http://user@{addr}/base"))
+        .arg("--output")
+        .arg(temp.path().join("out"))
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("private_net_blocked"));
+
+    let connected = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    server.join().unwrap();
+    assert!(!connected, "observe must reject before opening a socket");
 }
