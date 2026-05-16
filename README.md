@@ -35,10 +35,10 @@ At runtime the CLI drives Docker, so a working Docker daemon is required on the 
 ## Quick start
 
 ```bash
-# Pull + run the image (no Rust toolchain needed):
+# Pull + run the image (no Rust toolchain needed; pin by digest):
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
+  ghcr.io/kerberosmansour/zaprun@sha256:<digest> \
   zaprun scan http://host.docker.internal:4000 --active --profile spa-pr
 
 # Or use the cargo-installed binary against a digest-pinned image:
@@ -83,8 +83,8 @@ When `openapi.yaml`, `openapi.yml`, or `openapi.json` exists at the target repo 
 Every published image digest is signed (cosign keyless via Sigstore Fulcio + Rekor) and carries three attestations — SLSA Build Provenance v1, an SPDX-JSON SBOM, and a CycloneDX-JSON SBOM. The signing happens in an isolated reusable workflow that holds `id-token: write` (the build job does not), per SLSA Build L3 guidance.
 
 ```bash
-# Anyone can pull — the GHCR package is public.
-docker pull ghcr.io/kerberosmansour/zaprun:v0.3.0
+# Pull the exact digest you'll run.
+docker pull ghcr.io/kerberosmansour/zaprun@sha256:<digest>
 
 # Verify SLSA Build Provenance + SBOMs.
 gh attestation verify \
@@ -105,7 +105,7 @@ cosign verify \
 | `@sha256:<64-hex>` | every push to main; every release | immutable — pin here in production |
 | `:<full-git-sha>` | every push to main | immutable |
 | `:edge` | every push to main | floating — re-points to the most recent main commit |
-| `:v0.3.0` | release tag | immutable per release |
+| `:v0.3.0` | release tag | convenience alias (do not use in consumer runs; pin `@sha256` instead) |
 | `:v0.3`, `:v0` | release tag (skipped for pre-releases) | floating — re-points to the latest patch / minor |
 | `:latest` | **NEVER PUBLISHED** | n/a |
 
