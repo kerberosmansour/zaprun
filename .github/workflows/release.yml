@@ -75,17 +75,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Install crane
-        # `crane tag` preserves the manifest digest when adding a new tag.
-        # `docker buildx imagetools create --tag` REBUILDS the manifest,
-        # which produces a new digest and detaches the new tag from the
-        # signatures + attestations bound to the source digest. crane is
-        # the canonical OCI-aware re-tag tool.
+        # Install crane from tagged source via `go install` (module + checksum
+        # verification), avoiding execution of an unverified prebuilt binary.
         run: |
           set -euo pipefail
-          VERSION="v0.20.6"
-          curl -sSfL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin crane
-          crane version
+          GOBIN="$HOME/bin"
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/google/go-containerregistry/cmd/crane@v0.20.6
+          "$GOBIN"/crane version
       - name: Resolve source SHA-tagged image
         id: src
         env:
@@ -174,9 +172,10 @@ jobs:
       - name: Install crane
         run: |
           set -euo pipefail
-          VERSION="v0.20.6"
-          curl -sSfL "https://github.com/google/go-containerregistry/releases/download/${VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin crane
+          GOBIN="$HOME/bin"
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/google/go-containerregistry/cmd/crane@v0.20.6
       - name: Resolve digest for this release
         id: digest
         env:
