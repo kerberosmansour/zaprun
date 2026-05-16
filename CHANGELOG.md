@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.1 - 2026-05-16
+
+- Fixed a high-severity `zaprun observe` SSRF guard bypass where manual target parsing disagreed with `reqwest` replay URL parsing.
+- Reused SunLit `secure_boundary::SafeUrl` for the default no-internal-target SSRF blocklist and kept zaprun's stricter always-blocked IMDS/link-local policy.
+- Added regression coverage for userinfo authority bypasses, bracketed IPv6 literals, IPv4-mapped IPv6 literals, and observe replay rejection before any protected socket connection is opened.
+
 ## v0.3.0 - 2026-05-15
 
 - Baked ZAP Client Side Integration `client` 0.24.0 and OWASP PTK `ptk` 0.4.0 add-ons into the hardened image with SHA-256 verified downloads.
