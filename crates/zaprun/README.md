@@ -2,7 +2,7 @@
 
 `zaprun` is a point-and-shoot ZAP driver: it builds an OWASP ZAP Automation Framework plan, runs ZAP via a digest-pinned container, and writes a stable set of artifacts so CI gates and humans can reason about results the same way.
 
-This manual is the canonical reference for v0.3.0. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.3.0`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
+This manual is the canonical reference for v0.3.1. It describes the self-contained `zaprun` crate and the CLI baked into [`ghcr.io/kerberosmansour/zaprun:v0.3.1`](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun).
 
 ## Install
 
@@ -14,7 +14,7 @@ cargo install zaprun
 
 # 2. From the prebuilt image — no Rust toolchain needed. Linux-amd64-native;
 #    on macOS arm64 the image runs via Rosetta / QEMU emulation.
-docker pull ghcr.io/kerberosmansour/zaprun:v0.3.0
+docker pull ghcr.io/kerberosmansour/zaprun:v0.3.1
 
 # 3. From source.
 git clone https://github.com/kerberosmansour/zaprun
@@ -77,7 +77,7 @@ Two distribution surfaces:
 1. **Baked into the image** at `/usr/local/bin/zaprun`. Pull the digest-pinned image and invoke `zaprun` as the first argument. This is the canonical way to run scans — no host Rust toolchain required.
 2. **Built from source** by cloning the repo and running `cargo build --release -p zaprun`. The resulting binary lives at `target/release/zaprun`. Useful for development; for scans it's still better to use the image because the image bundles the matching ZAP runtime + add-ons + helper scripts.
 
-The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.3.0`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
+The CLI's `--image` flag enforces digest pinning. Tag references (`:v0.3.1`, `:edge`) are NOT accepted; only `<repo>@sha256:<64-hex>` is. This is by design — every published digest carries a cosign signature and three attestations (SLSA Build Provenance, SPDX SBOM, CycloneDX SBOM) and tag-by-tag resolution loses the binding.
 
 `zaprun` does not depend on `dast-spike`; the `init`, `rederive`, `triage-sarif`, schema, SARIF, and path-safety code used by the public CLI lives inside this crate.
 
@@ -196,7 +196,7 @@ zaprun plan http://localhost:3001 --dry-run --output output/zaprun-plan
 
 Writes: `plan.yaml`, `run.json`.
 
-Note: in v0.3.0, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
+Note: in v0.3.x, `plan` only supports `--dry-run`. Running the plan from `plan` directly is reserved for MVP2.
 
 ### `scan`
 
@@ -432,11 +432,11 @@ zaprun calibrate ./calibration/nodegoat.toml \
 
 Writes: calibration-results JSON in the output directory.
 
-In v0.3.0 the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
+In v0.3.x the calibration evaluator reads the profile and produces a placeholder result; full scan-orchestration is tracked as a zaprun follow-up. The flag surface is stable.
 
 ### `explain`
 
-Explain a previous run directory (placeholder in v0.3.0).
+Explain a previous run directory (placeholder in v0.3.x).
 
 ```text
 Usage: zaprun explain <RUN_DIR>
@@ -490,7 +490,7 @@ mkdir -p output && chmod 0777 output
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.1 \
   zaprun scan http://host.docker.internal:4000 \
     --active --profile spa-pr --scan-timeout 30m
 
@@ -514,7 +514,7 @@ docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v /tmp/openapi.yaml:/spec/openapi.yaml:ro \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.1 \
   zaprun api /spec/openapi.yaml \
     --target http://host.docker.internal:3001 \
     --active
@@ -539,7 +539,7 @@ REQ
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
   -v "$PWD/req.http:/in/req.http:ro" \
-  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.1 \
   zaprun observe \
     --request /in/req.http \
     --target https://staging.example.test
@@ -576,7 +576,7 @@ Generic rule candidates must pass the gate before they belong in this repository
 # Run the scan…
 docker run --rm \
   -v "$PWD/output:/zap/wrk/output" \
-  ghcr.io/kerberosmansour/zaprun:v0.3.0 \
+  ghcr.io/kerberosmansour/zaprun:v0.3.1 \
   zaprun scan http://host.docker.internal:4000 --active
 SCAN_EXIT=$?
 

@@ -3,7 +3,7 @@
 Reproducible DAST scans with a deterministic CLI and a hardened OWASP ZAP image.
 
 [![crates.io](https://img.shields.io/crates/v/zaprun.svg)](https://crates.io/crates/zaprun)
-[![v0.3.0](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/kerberosmansour/zaprun/releases/tag/v0.3.0)
+[![v0.3.1](https://img.shields.io/badge/release-v0.3.1-blue)](https://github.com/kerberosmansour/zaprun/releases/tag/v0.3.1)
 [![image](https://img.shields.io/badge/ghcr.io-zaprun-blue?logo=docker)](https://github.com/kerberosmansour/zaprun/pkgs/container/zaprun)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -23,7 +23,7 @@ Three options, depending on your host:
 cargo install zaprun
 
 # 2. Prebuilt container image (linux/amd64; runs via emulation on macOS arm64).
-docker pull ghcr.io/kerberosmansour/zaprun:v0.3.0
+docker pull ghcr.io/kerberosmansour/zaprun:v0.3.1
 
 # 3. From source.
 git clone https://github.com/kerberosmansour/zaprun
@@ -105,7 +105,7 @@ cosign verify \
 | `@sha256:<64-hex>` | every push to main; every release | immutable — pin here in production |
 | `:<full-git-sha>` | every push to main | immutable |
 | `:edge` | every push to main | floating — re-points to the most recent main commit |
-| `:v0.3.0` | release tag | convenience alias (do not use in consumer runs; pin `@sha256` instead) |
+| `:v0.3.1` | release tag | convenience alias (do not use in consumer runs; pin `@sha256` instead) |
 | `:v0.3`, `:v0` | release tag (skipped for pre-releases) | floating — re-points to the latest patch / minor |
 | `:latest` | **NEVER PUBLISHED** | n/a |
 
@@ -145,7 +145,7 @@ SARIF is evidence, not authority: a result becomes `dast-detectable` only when t
 
 ## Status
 
-`v0.3.0` adds `zaprun ptk`, an OWASP PTK Phase 1 lane that uses ZAP's Client Spider and the image-baked Client Side Integration + PTK add-ons. The legacy workspace crates `dast-spike` and `dast-spike-rules` are not publishable crates; release the public CLI with:
+`v0.3.1` is a patch release for the `zaprun observe` SSRF guard. It retains the `v0.3.0` PTK Phase 1 lane that uses ZAP's Client Spider and the image-baked Client Side Integration + PTK add-ons. The legacy workspace crates `dast-spike` and `dast-spike-rules` are not publishable crates; release the public CLI with:
 
 ```bash
 cargo publish -p zaprun
@@ -156,10 +156,10 @@ Do not use `cargo publish --workspace` for this repo.
 The image release flow is:
 
 1. Merge this PR to `main`; `.github/workflows/build-zap-image.yml` builds, scans, signs, attests, and pushes `ghcr.io/kerberosmansour/zaprun:<git-sha>`.
-2. Tag the merged commit with `v0.3.0` and push the tag; `.github/workflows/release.yml` retags the existing signed digest as `:v0.3.0`, `:v0.3`, and `:v0` without rebuilding.
+2. Tag the merged commit with `v0.3.1` and push the tag; `.github/workflows/release.yml` retags the existing signed digest as `:v0.3.1`, `:v0.3`, and `:v0` without rebuilding.
 3. Use the release workflow's digest output for downstream pin bumps and verification.
 
-The previous `v0.2.0` image and crate are signed + attested and public; `v0.3.0` publishes the PTK Phase 1 CLI and hardened image update.
+The previous `v0.3.0` image and crate are signed + attested and public; `v0.3.1` publishes the observe SSRF guard patch for the CLI and hardened image.
 
 The repo follows `v<major>.<minor>.<patch>` tagging via [release.yml](.github/workflows/release.yml). There is no `:latest` image tag — consumers are expected to pin by digest.
 
